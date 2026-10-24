@@ -1,0 +1,50 @@
+name: Scheduled scrapes
+
+# Zero-cost alternative to a server for scrapers only: GitHub runs the enabled scrapers on a
+# schedule and posts to Discord through webhooks. Enable it by setting the repository variable
+# ENABLE_ACTIONS_CRON to "true". Scraper state and datasets persist through the Actions cache
+# and run artifacts. Agent tasks and the interactive bot still need the server.
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scrape-cron
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    if: vars.ENABLE_ACTIONS_CRON == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --omit=optional
+      - name: Restore scraper state
+        uses: actions/cache@v4
+        with:
+          path: data
+          key: harness-data-${{ github.run_id }}
+          restore-keys: harness-data-
+      - name: Run enabled scrapers
+        env:
+          DISCORD_WEBHOOK_REPORTS_URL: ${{ secrets.DISCORD_WEBHOOK_REPORTS_URL }}
+          DISCORD_WEBHOOK_ALERTS_URL: ${{ secrets.DISCORD_WEBHOOK_ALERTS_URL }}
+          LOG_LEVEL: warn
+        run: npx tsx src/cli.ts scrape --all --notify
+      - name: Keep the datasets
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: datasets-${{ github.run_id }}
+          path: data/datasets
+          if-no-files-found: ignore
+          retention-days: 30

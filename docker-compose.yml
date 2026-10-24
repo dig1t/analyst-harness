@@ -1,0 +1,30 @@
+# Single-container deployment for a small VPS. Copy .env.example to .env first.
+services:
+  harness:
+    image: ghcr.io/firebit-dev/analyst-harness:latest
+    build: .
+    container_name: analyst-harness
+    restart: unless-stopped
+    env_file: .env
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 768m
+    cpus: 1.0
+    pids_limit: 256
+    volumes:
+      - harness-data:/app/data
+    # The health endpoint stays on the host's loopback; the bot needs no inbound ports.
+    ports:
+      - '127.0.0.1:8080:8080'
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+
+volumes:
+  harness-data:
