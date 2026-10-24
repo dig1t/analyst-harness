@@ -1,0 +1,13 @@
+{
+  "search": "path:wiki",
+  "showTags": false,
+  "showAttachments": false,
+  "hideUnresolved": false,
+  "showOrphans": true,
+  "colorGroups": [
+    { "query": "path:wiki/lessons", "color": { "a": 1, "rgb": 15105570 } },
+    { "query": "path:wiki/harness", "color": { "a": 1, "rgb": 3447003 } },
+    { "query": "path:wiki/legal-ethics", "color": { "a": 1, "rgb": 15158332 } },
+    { "query": "path:wiki/fundamentals", "color": { "a": 1, "rgb": 3066993 } }
+  ]
+}
