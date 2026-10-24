@@ -1,0 +1,56 @@
+{
+  "name": "analyst-harness",
+  "version": "0.1.0",
+  "description": "Self-learning data analyst agent harness: configurable ReAct loop, skills, agents, cron scrapers, Discord bot and an Obsidian knowledge vault.",
+  "private": true,
+  "license": "MIT",
+  "main": "dist/index.js",
+  "bin": {
+    "harness": "dist/cli.js"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "cli": "tsx src/cli.ts",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "test:watch": "jest --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "vault:lint": "tsx src/cli.ts vault lint",
+    "check": "npm run lint && npm run typecheck && npm run test"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.3.0",
+    "cheerio": "^1.2.0",
+    "croner": "^10.0.1",
+    "discord.js": "^14.27.0",
+    "fast-xml-parser": "^5.11.2",
+    "robots-parser": "^3.0.1",
+    "turndown": "^7.2.4",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.7"
+  },
+  "optionalDependencies": {
+    "@duckdb/node-api": "1.5.6-r.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^22.20.5",
+    "@types/turndown": "^5.0.6",
+    "eslint": "^10.13.0",
+    "jest": "^30.5.2",
+    "prettier": "^3.9.10",
+    "ts-jest": "^29.4.15",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.0"
+  }
+}

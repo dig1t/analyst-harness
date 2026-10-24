@@ -1,0 +1,13 @@
+node_modules/
+/dist/
+/coverage/
+/data/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+knowledge/.obsidian/workspace.json
+knowledge/.obsidian/workspace-mobile.json
+knowledge/.obsidian/cache
+knowledge/.trash/

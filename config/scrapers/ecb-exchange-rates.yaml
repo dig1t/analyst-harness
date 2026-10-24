@@ -1,0 +1,18 @@
+# Daily euro reference rates (published by the ECB) through the free Frankfurter API.
+# Disabled by default: the endpoint could not be verified from the build sandbox. Run
+# `harness scrape ecb-exchange-rates --dry-run` and enable it once the dry run succeeds.
+name: ecb-exchange-rates
+description: ECB euro reference exchange rates via the Frankfurter API
+enabled: false
+schedule: '35 15 * * 1-5'
+source:
+  type: json
+  url: https://api.frankfurter.app/latest?from=EUR
+  items: rates
+  entries: true
+fields:
+  currency: { path: key, type: string, required: true }
+  rate: { path: value, type: number, required: true }
+output: { dataset: ecb-exchange-rates, mode: changed }
+validation: { minItems: 20, maxInvalidRatio: 0 }
+notify: { onNew: false, onFailure: true, alertAfterFailures: 2 }

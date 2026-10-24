@@ -1,0 +1,21 @@
+# HTML scraping demo against books.toscrape.com, a sandbox built for scraping practice.
+# Disabled by default: enable it to see selectors, pagination and validation at work.
+name: books-toscrape
+description: Demo HTML scraper with pagination (books.toscrape.com sandbox)
+enabled: false
+schedule: '0 5 * * 1'
+source:
+  type: html
+  url: https://books.toscrape.com/catalogue/page-1.html
+  itemSelector: article.product_pod
+  next: { selector: li.next > a, attr: href, maxPages: 3 }
+fields:
+  title: { selector: h3 > a, attr: title, type: string, required: true }
+  url: { selector: h3 > a, attr: href, type: url, required: true, transform: [absoluteUrl] }
+  price_gbp: { selector: .price_color, type: number, required: true, transform: [number] }
+  in_stock: { selector: .availability, type: string, transform: [collapseWhitespace] }
+  rating: { selector: p.star-rating, attr: class, type: string, regex: "star-rating (\\w+)" }
+key: url
+output: { dataset: books-toscrape, mode: changed }
+validation: { minItems: 20, maxInvalidRatio: 0.05 }
+fetch: { minIntervalMs: 1500 }
