@@ -189,6 +189,7 @@ describe('runAgent (ReAct loop)', () => {
     expect(req.tools.map((t) => t.name).sort()).toEqual([
       'bash',
       'delegate_task',
+      'domain_status',
       'load_skill',
       'recall_event',
       'run_scraper',

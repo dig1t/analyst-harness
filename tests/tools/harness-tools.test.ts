@@ -174,6 +174,7 @@ describe('ToolRegistry', () => {
     expect(bashOnly.names().sort()).toEqual([
       'bash',
       'delegate_task',
+      'domain_status',
       'load_skill',
       'recall_event',
       'run_scraper',

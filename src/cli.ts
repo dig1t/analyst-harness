@@ -9,11 +9,15 @@ import { loadConfig } from './config/load';
 import type { AgentEvent } from './core/agent-loop';
 import { loadUiAssets } from './dashboards/assets';
 import { DashboardService } from './dashboards/service';
+import { formatDomainSeed, isTrackableHost } from './net/domains';
+import { probeUrl } from './net/probe';
 import { toDiscordJson } from './discord/commands';
 import { DiscordApprovalGateway } from './discord/approvals';
 import type { ApprovalGateway } from './safety/permissions';
 import { DuckDbSqlService } from './tools/sql-engine';
 import { formatScrapeReport } from './scrapers/runner';
+import { mapConcurrent } from './util/concurrency';
+import { writeTextAtomic } from './util/fs';
 import { formatUsd } from './util/text';
 
 export const USAGE = `analyst-harness CLI
@@ -33,6 +37,8 @@ Usage: harness <command> [options]
   dashboard build <spec.yaml> | dashboard list | dashboard remove <slug>
                                                                   Build and manage dashboards
   explore <dataset>                                               Build the explorer dashboard for a dataset
+  domains [host...] | domains check <host...> [--vault] [--scrapers] [--save]
+                                                                  Which hosts answer from this environment
   discord commands                                                Print the slash command JSON
   doctor                                                          Check configuration and dependencies
 `;
@@ -113,6 +119,9 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
       notify: { type: 'boolean' },
       limit: { type: 'string' },
       strict: { type: 'boolean' },
+      vault: { type: 'boolean' },
+      scrapers: { type: 'boolean' },
+      save: { type: 'boolean' },
     },
   });
   const config = await loadConfig();
@@ -266,6 +275,64 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
         }
         const built = await rt.dashboards.explore(dataset);
         io.out(DashboardService.summary(built, built.path));
+        return 0;
+      }
+      case 'domains': {
+        if (positionals[0] !== 'check') {
+          io.out(rt.domains.report(positionals.length ? positionals : undefined));
+          return 0;
+        }
+        const targets = new Map<string, string>();
+        for (const h of positionals.slice(1)) {
+          const host = h
+            .replace(/^https?:\/\//i, '')
+            .split('/')[0]!
+            .toLowerCase();
+          if (isTrackableHost(host)) targets.set(host, `https://${host}/`);
+          else io.err(`skipped ${h}: not a public host name`);
+        }
+        if (values.scrapers)
+          for (const spec of rt.scrapers.all()) {
+            const host = new URL(spec.source.url).hostname.toLowerCase();
+            if (isTrackableHost(host) && !targets.has(host)) targets.set(host, spec.source.url);
+          }
+        if (values.vault)
+          for (const [host, e] of await rt.vault.externalUrls()) {
+            if (!isTrackableHost(host) || targets.has(host)) continue;
+            // The shortest cited https URL is usually the site root or an index page.
+            const cited = [...e.urls]
+              .filter((u) => u.startsWith('https://'))
+              .sort((a, b) => a.length - b.length);
+            targets.set(host, cited[0] ?? `https://${host}/`);
+          }
+        if (!targets.size) {
+          io.err('Usage: harness domains check <host...> [--vault] [--scrapers] [--save]');
+          return 2;
+        }
+        const results = await mapConcurrent([...targets], 8, async ([host, url]) => {
+          const r = await probeUrl(url, {
+            userAgent: config.scrapers.userAgent,
+            allowPrivate: config.tools.allowPrivateNetwork,
+          });
+          return { host, status: rt.domains.record(url, r), ms: r.ms };
+        });
+        for (const r of results.sort(
+          (a, b) => a.status.localeCompare(b.status) || a.host.localeCompare(b.host),
+        ))
+          io.out(`${r.status.padEnd(12)} ${r.host.padEnd(44)} ${String(r.ms).padStart(6)} ms`);
+        const counts = new Map<string, number>();
+        for (const r of results) counts.set(r.status, (counts.get(r.status) ?? 0) + 1);
+        io.err(
+          `${results.length} hosts from ${rt.domains.environment}: ${[...counts].map(([s, n]) => `${n} ${s}`).join(', ')}`,
+        );
+        if (values.save) {
+          const day = new Date().toISOString().slice(0, 10);
+          for (const r of results) rt.domains.setSeedStatus(r.host, r.status, day);
+          await writeTextAtomic(config.resolved.domainsFile, formatDomainSeed(rt.domains.seed));
+          io.err(
+            `saved ${results.length} hosts for ${rt.domains.environment} to ${config.resolved.domainsFile}`,
+          );
+        }
         return 0;
       }
       case 'doctor': {

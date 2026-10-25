@@ -87,6 +87,14 @@ export interface DashboardToolService {
   ): Promise<string>;
 }
 
+export interface DomainService {
+  /** Why a fetch to `url` should not be tried from this environment, or null. */
+  failFast(url: string): string | null;
+  record(url: string, outcome: { status?: number; error?: unknown }): void;
+  /** Model-readable status of the hosts, or a summary of this environment when none are given. */
+  describe(hosts?: string[]): string;
+}
+
 export interface ToolServices {
   knowledge?: KnowledgeService;
   skills?: SkillService;
@@ -94,6 +102,7 @@ export interface ToolServices {
   scrapers?: ScraperService;
   sql?: SqlService;
   dashboards?: DashboardToolService;
+  domains?: DomainService;
   fetch?: typeof fetch;
 }
 

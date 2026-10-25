@@ -125,6 +125,22 @@ export const HarnessConfigSchema = z
         digestEnabled: true,
       }),
     vault: z.object({ lintSchedule: cron.default('41 4 * * 0') }).default({ lintSchedule: '41 4 * * 0' }),
+    domains: z
+      .object({
+        /** The checked-in registry of probed hosts (config/domains.yaml). */
+        file: z.string().default('./config/domains.yaml'),
+        /** This deployment's column in the registry; HARNESS_ENVIRONMENT overrides it. */
+        environment: z
+          .string()
+          .regex(/^[a-z0-9][a-z0-9-]{0,40}$/)
+          .default('server'),
+        /** web_fetch refuses a host after this many network failures in a row... */
+        failFastAfter: z.number().int().min(1).max(20).default(3),
+        /** ...for this many hours (0 turns it off). */
+        failFastHours: z.number().min(0).max(168).default(6),
+      })
+      .strict()
+      .default({ file: './config/domains.yaml', environment: 'server', failFastAfter: 3, failFastHours: 6 }),
     dashboards: z
       .object({
         /** Where dashboards are written (defaults to <data>/dashboards). */
@@ -194,6 +210,7 @@ export interface HarnessConfig extends HarnessFileConfig {
     state: string;
     datasets: string;
     dashboards: string;
+    domainsFile: string;
   };
   discordEnv: DiscordSettings;
   dashboardEnv: DashboardSettings;

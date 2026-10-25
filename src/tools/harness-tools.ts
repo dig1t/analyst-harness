@@ -177,6 +177,29 @@ Side effects: CREATE/INSERT affect only this run's in-memory database; COPY ... 
   },
 });
 
+export const domainStatusTool = defineTool({
+  name: 'domain_status',
+  category: 'auxiliary',
+  readOnly: true,
+  usageRule: 'check which hosts answer from this environment before planning a source or a scraper.',
+  description: `Report whether hosts answer from the environment the harness runs in: live observations from web_fetch and the scrapers (answered, failed, refused for repeated network failures) plus the checked-in domain registry (config/domains.yaml), which records per environment which hosts were reachable when last probed, with notes such as an API's base path.
+When: before choosing a data source or designing a scraper, and after web_fetch refuses a host, to find a source that works from here.
+Protocol: hosts is a list of host names (pypi.org, www.ecb.europa.eu); omit it for a summary of this environment.
+Side effects: none.`,
+  schema: z.object({ hosts: z.array(z.string().min(1).max(253)).max(50).optional() }),
+  async execute({ hosts }, ctx) {
+    const domains = ctx.services.domains;
+    if (!domains) throw new ToolError('The domain registry is not configured.');
+    const names = hosts?.map((h) =>
+      h
+        .replace(/^https?:\/\//i, '')
+        .split('/')[0]!
+        .toLowerCase(),
+    );
+    return { content: domains.describe(names) };
+  },
+});
+
 export const harnessTools: Array<ToolDefinition<never>> = [
   updatePlanTool,
   recallEventTool,
@@ -185,4 +208,5 @@ export const harnessTools: Array<ToolDefinition<never>> = [
   delegateTaskTool,
   runScraperTool,
   sqlQueryTool,
+  domainStatusTool,
 ] as Array<ToolDefinition<never>>;

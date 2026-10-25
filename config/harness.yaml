@@ -71,6 +71,12 @@ scrapers:
 vault:
   lintSchedule: '41 4 * * 0'
 
+domains:
+  file: ./config/domains.yaml # probed hosts per environment; `harness domains check` refreshes it
+  environment: server # this deployment's column in the registry (HARNESS_ENVIRONMENT overrides)
+  failFastAfter: 3 # web_fetch refuses a host after this many network failures in a row
+  failFastHours: 6
+
 dashboards:
   # dir: ./data/dashboards # default: <data>/dashboards
   serve: true # serve /dashboards/ on PORT; set DASHBOARD_PASSWORD for basic auth (docs/dashboards.md)

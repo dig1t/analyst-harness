@@ -93,6 +93,13 @@ export function stripCode(markdown: string): string {
   return markdown.replace(/```[\s\S]*?```/g, '').replace(/`[^`\n]*`/g, '');
 }
 
+const URL_RE = /https?:\/\/[^\s)\]>"'`,;|]+/g;
+
+/** Absolute http(s) URLs in prose and links, outside code (code holds examples, not sources). */
+export function extractUrls(body: string): string[] {
+  return [...new Set([...stripCode(body).matchAll(URL_RE)].map((m) => m[0].replace(/[.:]+$/, '')))];
+}
+
 export function extractLinks(body: string): string[] {
   const out: string[] = [];
   for (const m of stripCode(body).matchAll(LINK_RE)) {
@@ -119,6 +126,25 @@ export class KnowledgeVault implements KnowledgeService {
 
   async articles(): Promise<Article[]> {
     return (await this.load()).articles;
+  }
+
+  /** Every external URL the wiki cites, grouped by host, with the articles that cite it. */
+  async externalUrls(): Promise<Map<string, { urls: Set<string>; articles: Set<string> }>> {
+    const byHost = new Map<string, { urls: Set<string>; articles: Set<string> }>();
+    for (const a of await this.articles())
+      for (const url of extractUrls(a.body)) {
+        let host: string;
+        try {
+          host = new URL(url).hostname.toLowerCase();
+        } catch {
+          continue;
+        }
+        const entry = byHost.get(host) ?? { urls: new Set<string>(), articles: new Set<string>() };
+        entry.urls.add(url);
+        entry.articles.add(a.path);
+        byHost.set(host, entry);
+      }
+    return byHost;
   }
 
   private async signature(files: string[]): Promise<string> {

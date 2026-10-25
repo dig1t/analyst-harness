@@ -54,6 +54,8 @@ export interface PoliteHttpClientOptions {
   sleep?: (ms: number) => Promise<void>;
   random?: () => number;
   maxBytes?: number;
+  /** Told about every response and network failure (the domain registry listens here). */
+  observe?: (url: string, outcome: { status?: number; error?: unknown }) => void;
 }
 
 const RETRYABLE = new Set([408, 425, 429, 500, 502, 503, 504]);
@@ -102,11 +104,18 @@ export class PoliteHttpClient {
       const headers: Record<string, string> = { 'user-agent': this.opts.userAgent, ...(opts.headers ?? {}) };
       if (opts.etag) headers['if-none-match'] = opts.etag;
       if (opts.lastModified) headers['if-modified-since'] = opts.lastModified;
-      const res = await this.fetchImpl(current, {
-        headers,
-        redirect: 'manual',
-        signal: AbortSignal.timeout(opts.timeoutMs ?? 20_000),
-      });
+      let res: Response;
+      try {
+        res = await this.fetchImpl(current, {
+          headers,
+          redirect: 'manual',
+          signal: AbortSignal.timeout(opts.timeoutMs ?? 20_000),
+        });
+      } catch (error) {
+        this.opts.observe?.(current, { error });
+        throw error;
+      }
+      this.opts.observe?.(current, { status: res.status });
       const location = res.headers.get('location');
       if (res.status >= 300 && res.status < 400 && res.status !== 304 && location) {
         current = new URL(location, current).toString();

@@ -47,6 +47,9 @@ export async function loadConfig(
   if (env.HARNESS_SCRAPERS_DIR) cfg.paths.scrapers = env.HARNESS_SCRAPERS_DIR;
   if (env.HARNESS_AGENTS_DIR) cfg.paths.agents = env.HARNESS_AGENTS_DIR;
   if (env.HARNESS_DASHBOARDS_DIR) cfg.dashboards.dir = env.HARNESS_DASHBOARDS_DIR;
+  if (env.HARNESS_DOMAINS_FILE) cfg.domains.file = env.HARNESS_DOMAINS_FILE;
+  if (env.HARNESS_ENVIRONMENT && /^[a-z0-9][a-z0-9-]{0,40}$/.test(env.HARNESS_ENVIRONMENT))
+    cfg.domains.environment = env.HARNESS_ENVIRONMENT;
   if (env.HARNESS_MODEL) cfg.models.default = env.HARNESS_MODEL;
   if (env.HARNESS_PROVIDER === 'anthropic' || env.HARNESS_PROVIDER === 'scripted')
     cfg.provider = env.HARNESS_PROVIDER;
@@ -75,6 +78,7 @@ export async function loadConfig(
       state: path.join(data, 'state'),
       datasets: path.join(data, 'datasets'),
       dashboards: cfg.dashboards.dir ? abs(cfg.dashboards.dir) : path.join(data, 'dashboards'),
+      domainsFile: abs(cfg.domains.file),
     },
     discordEnv: {
       token: env.DISCORD_TOKEN || undefined,

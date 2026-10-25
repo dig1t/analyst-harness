@@ -36,6 +36,7 @@ import {
   type ApprovalGateway,
 } from '../safety/permissions';
 import { Workspace, type Mount } from '../safety/workspace';
+import { DomainRegistry, loadDomainSeed } from '../net/domains';
 import { Scheduler } from '../scheduler/scheduler';
 import { PoliteHttpClient } from '../scrapers/http-client';
 import { ScraperRegistry } from '../scrapers/registry';
@@ -126,6 +127,7 @@ export class HarnessRuntime {
     readonly learning: LearningService,
     readonly scrapers: ScraperRegistry,
     readonly http: PoliteHttpClient,
+    readonly domains: DomainRegistry,
     opts: RuntimeOptions,
     logger: Logger,
   ) {
@@ -206,11 +208,19 @@ export class HarnessRuntime {
       budget: spend,
       logger: logger.child({ component: 'learning' }),
     });
+    const domains = await DomainRegistry.load({
+      statePath: path.join(config.resolved.state, 'domains.json'),
+      seed: await loadDomainSeed(config.resolved.domainsFile),
+      environment: config.domains.environment,
+      failFastAfter: config.domains.failFastAfter,
+      failFastMs: config.domains.failFastHours * 3_600_000,
+    });
     const http = new PoliteHttpClient({
       userAgent: config.scrapers.userAgent,
       fetch: opts.fetch,
       logger: logger.child({ component: 'http' }),
       allowPrivateNetwork: config.tools.allowPrivateNetwork,
+      observe: (url, outcome) => domains.record(url, outcome),
     });
     const runner = new ScraperRunner(http, config.resolved.data, logger.child({ component: 'scraper' }));
     const scrapers = new ScraperRegistry(runner, config.resolved.scrapers);
@@ -229,6 +239,7 @@ export class HarnessRuntime {
       learning,
       scrapers,
       http,
+      domains,
       opts,
       logger,
     );
@@ -337,6 +348,11 @@ export class HarnessRuntime {
       skills: this.skills,
       delegate,
       sql: this.sql,
+      domains: {
+        failFast: (url) => this.domains.failFast(url),
+        record: (url, outcome) => void this.domains.record(url, outcome),
+        describe: (hosts) => this.domains.report(hosts),
+      },
       dashboards: {
         build: async (spec, ctx) => {
           const r = await this.dashboards.build(spec, {
@@ -821,5 +837,6 @@ Its spec is scrapers/${name}.yaml (read-only for you).
     for (const c of this.active.values()) c.abort();
     await this.spend.flush();
     await this.bandit.flush();
+    await this.domains.flush();
   }
 }

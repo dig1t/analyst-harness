@@ -42,6 +42,9 @@ Run `npm run check` and `npm run format:check` before committing.
 - Learning loop: `src/learning/`; runtime wiring: `src/app/runtime.ts`.
 - Scrapers: `src/scrapers/` and `config/scrapers/*.yaml` (`docs/scrapers.md`).
 - Discord: `src/discord/` (router logic is tested; `client.ts` is a thin discord.js adapter).
+- Domain registry: `src/net/` and `config/domains.yaml` (`docs/domains.md`). Before relying on a
+  new web source, check it with `npm run cli -- domains <host>`; when you probe hosts from a
+  sandbox, record them with `HARNESS_ENVIRONMENT=<name> npm run cli -- domains check <host> --save`.
 - Dashboards: `src/dashboards/` (spec, validation, loading, rendering, service) with pure cores in
   `src/dashboards/core/` shared by the browser components in `ui/` (`docs/dashboards.md`).
   Browser code must not import Node modules; `npm run test:e2e` runs the UI in Chromium.
