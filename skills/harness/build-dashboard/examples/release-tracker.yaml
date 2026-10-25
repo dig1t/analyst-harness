@@ -1,0 +1,69 @@
+# A complete dashboard over a scraped dataset. Copy it to dashboards-src/<slug>.yaml in the
+# workspace, change the dataset and fields, then build_dashboard(spec_path=...).
+title: Python scraping libraries
+description: Release history of widely used Python scraping libraries. Filter by date or category, click a bar to filter, drag across the timeline to zoom in.
+data:
+  releases:
+    dataset: pypi-releases
+    description: One row per release with at least one uploaded file.
+    columns:
+      released_at: { label: Released }
+      size_bytes: { label: Size, format: bytes }
+      package: { label: Package }
+      category: { label: Category }
+      prerelease: { label: Pre-release }
+      has_wheel: { label: Has wheel }
+filters:
+  - { type: daterange, field: released_at, label: Released }
+  - { type: select, field: category, label: Category }
+  - { type: search, fields: [package, version], placeholder: Search packages and versions }
+sections:
+  - items:
+      - type: kpi
+        title: Releases
+        value: count
+        delta: { field: released_at, period: year }
+        sparkline: { field: released_at, interval: month }
+      - { type: kpi, title: Packages, value: distinct(package) }
+      - { type: kpi, title: Median release size, value: median(size_bytes) }
+      - { type: kpi, title: Pre-release share, value: mean(prerelease), format: 'percent:0' }
+  - title: Release activity
+    items:
+      - type: area
+        title: Releases per quarter
+        subtitle: Stacked by library category
+        x: { field: released_at, interval: quarter }
+        y: count
+        series: { field: category, top: 5 }
+        stack: true
+        width: 9
+      - { type: facets, fields: [category, package, has_wheel], width: 3 }
+  - title: Packages
+    items:
+      - { type: bar, title: Releases by package, x: { field: package }, y: count, width: 6 }
+      - { type: histogram, title: Release size, field: size_bytes, width: 6 }
+      - type: scatter
+        title: Size and number of files per release
+        x: { field: files, label: Files uploaded, scale: log }
+        y: { field: size_bytes, label: Total size, scale: log }
+        series: { field: category, top: 3 }
+        label: version
+        trend: true
+        width: 12
+  - title: Releases
+    items:
+      - type: table
+        columns:
+          - package
+          - { field: version, link: url }
+          - released_at
+          - category
+          - { field: size_bytes, bar: true }
+          - has_wheel
+        sort: { field: released_at, direction: desc }
+      - type: markdown
+        text: |
+          **Size** sums every file uploaded for a release (source and wheels). Pre-releases
+          have `a`, `b`, `rc` or `dev` in the version.
+sources:
+  - 'PyPI JSON API, https://pypi.org/pypi/<package>/json'

@@ -1,0 +1,25 @@
+# Hacker News front page through the official Firebase API (no key, no scraping of HTML).
+name: hn-top-stories
+description: Hacker News top stories (official API)
+enabled: true
+schedule: '7 * * * *'
+source:
+  type: json
+  url: https://hacker-news.firebaseio.com/v0/topstories.json
+  items: ''
+  expand:
+    url: https://hacker-news.firebaseio.com/v0/item/{item}.json
+    limit: 30
+fields:
+  id: { path: id, type: integer, required: true }
+  title: { path: title, type: string, required: true, transform: [collapseWhitespace] }
+  url: { path: url, type: url }
+  score: { path: score, type: integer }
+  by: { path: by, type: string }
+  comments: { path: descendants, type: integer, default: 0 }
+  time: { path: time, type: date }
+key: id
+output: { dataset: hn-top-stories, mode: changed }
+validation: { minItems: 10, maxInvalidRatio: 0.2 }
+fetch: { minIntervalMs: 250, retries: 3, respectRobots: true }
+notify: { onNew: false, onFailure: true, alertAfterFailures: 2 }

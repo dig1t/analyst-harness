@@ -1,0 +1,10 @@
+/dist/
+/coverage/
+node_modules/
+/data/
+/knowledge/
+/skills/
+package-lock.json
+/test-results/
+/playwright-report/
+/config/domains.yaml

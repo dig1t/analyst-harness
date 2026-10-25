@@ -1,0 +1,12 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "noEmit": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "rootDir": ".."
+  },
+  "include": ["./**/*.ts", "../src/dashboards/core/**/*.ts", "../src/util/csv.ts"]
+}

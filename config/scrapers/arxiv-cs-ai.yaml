@@ -1,0 +1,21 @@
+# Newest cs.AI papers from the arXiv API (Atom). arXiv asks for at most one request every three seconds.
+name: arxiv-cs-ai
+description: Latest arXiv cs.AI submissions (official API, Atom feed)
+enabled: true
+schedule: '23 6 * * *'
+source:
+  type: rss
+  url: https://export.arxiv.org/api/query?search_query=cat:cs.AI&sortBy=submittedDate&sortOrder=descending&max_results=50
+  limit: 50
+fields:
+  id: { path: id, type: url, required: true }
+  title: { path: title, type: string, required: true, transform: [collapseWhitespace] }
+  link: { path: link, type: url }
+  published: { path: published, type: date }
+  authors: { path: author, type: string }
+  summary: { path: summary, type: string, transform: [collapseWhitespace] }
+key: id
+output: { dataset: arxiv-cs-ai, mode: new }
+validation: { minItems: 5, maxInvalidRatio: 0.1 }
+fetch: { minIntervalMs: 3000, retries: 2 }
+notify: { onNew: true, onFailure: true, alertAfterFailures: 2 }

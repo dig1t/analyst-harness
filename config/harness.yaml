@@ -1,0 +1,97 @@
+# analyst-harness configuration. Secrets never go here: use environment variables (.env.example).
+paths:
+  data: ./data # runs, state, datasets, workspace (mount a volume here in production)
+  knowledge: ./knowledge # the Obsidian / LLM-wiki vault
+  skills: ./skills
+  agents: ./agents
+  scrapers: ./config/scrapers
+
+provider: anthropic # anthropic | scripted (offline demo, no API calls)
+
+models:
+  default: claude-opus-5-5
+  effort: medium # low | medium | high | xhigh | max (Opus 5.5 defaults to medium; set explicitly)
+  # judge: claude-opus-5-5 # judge, reflection and skill synthesis (defaults to models.default)
+  maxTokensPerTurn: 64000
+
+anthropic:
+  thinkingDisplay: updates # progress notes between tool calls, shown in Discord
+  prefixMismatch: drop_block
+  fallbacks: true # server-side refusal fallback ("default" routing)
+
+budgets:
+  dailyUsd: 10 # hard daily cap across runs, judges and reflections (0 = no cap)
+  runUsd: 2 # per-run cap unless an agent sets budget_usd
+
+profiles:
+  default: t4-plan-tools-128k
+  selection: bandit # bandit | fixed
+  candidates:
+    - t4-plan-tools-128k # paper baseline: T4 context management, planning, full tool set
+    - t4-noplan-tools-128k
+    - t4-plan-bash-128k
+    - t4-noplan-bash-128k
+    - t4-plan-tools-64k
+    - t1-plan-tools-128k
+  costWeight: 0.15
+  costScaleUsd: 1
+  priors:
+    t4-plan-tools-128k: { alpha: 2, beta: 1 }
+
+learning:
+  enabled: true
+  judge: true
+  reflect: failures # always | failures | never
+  proposeSkills: true
+  minStepsForSkill: 6
+  immediate: true # learn right after each run (plus the nightly sweep below)
+  schedule: '17 3 * * *'
+
+permissions:
+  mode: default # default (ask for unknown commands) | trusted | readonly
+  cronMode: default # unattended runs: "ask" becomes "deny"
+  askFallback: deny
+  writeRequiresApproval: false
+  bashAllowExtra: # interpreters run with the harness user's rights; see docs/security.md
+    - '^(python3|duckdb|sqlite3)\b'
+  bashDenyExtra: []
+  cronAllowExtra: false # unattended runs (scraper repairs) do not get bashAllowExtra
+
+tools:
+  bashPassEnv: []
+  allowPrivateNetwork: false
+  postEditDiagnostics: true
+
+scrapers:
+  userAgent: 'analyst-harness/0.1 (+https://github.com/firebit-dev/analyst-harness)'
+  autoRepair: false # true: a failing scraper triggers the scraper-engineer to propose a fix
+  digestEnabled: true
+  digestSchedule: '3 8 * * *'
+
+vault:
+  lintSchedule: '41 4 * * 0'
+  staleDays: 365 # `vault status` flags articles not updated for this long
+  verify:
+    enabled: false # true: the librarian grounds the top of the verification queue in fetched sources
+    schedule: '23 5 * * 2,5'
+    articlesPerRun: 2 # each article is one librarian run (counts against the budgets)
+
+domains:
+  file: ./config/domains.yaml # probed hosts per environment; `harness domains check` refreshes it
+  environment: server # this deployment's column in the registry (HARNESS_ENVIRONMENT overrides)
+  failFastAfter: 3 # web_fetch refuses a host after this many network failures in a row
+  failFastHours: 6
+
+dashboards:
+  # dir: ./data/dashboards # default: <data>/dashboards
+  serve: true # serve /dashboards/ on PORT; set DASHBOARD_PASSWORD for basic auth (docs/dashboards.md)
+  autoExplore: true # keep an explorer dashboard per dataset, rebuilt when a scrape adds data
+  maxMb: 25 # data is embedded in each page; larger builds fail with a hint to aggregate in SQL
+
+discord:
+  prefixCommands: false # true also accepts "!ask ..." messages (needs the Message Content intent)
+  approvalTimeoutSec: 300
+
+logging:
+  level: info
+  format: json
