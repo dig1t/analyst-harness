@@ -29,7 +29,7 @@ jobs:
           cache: npm
       - run: npm ci --omit=optional
       - name: Restore scraper state
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: data
           key: harness-data-${{ github.run_id }}
