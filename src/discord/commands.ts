@@ -123,6 +123,23 @@ export const COMMANDS: CommandSpec[] = [
     ],
   },
   {
+    name: 'dashboard',
+    description: 'Interactive dashboards built by the harness',
+    subcommands: [
+      { name: 'list', description: 'List dashboards with their links' },
+      {
+        name: 'get',
+        description: 'Link a dashboard and attach its self-contained HTML file',
+        options: [name('Dashboard slug (see /dashboard list)')],
+      },
+      {
+        name: 'explore',
+        description: 'Build or rebuild the explorer dashboard for a scraped dataset',
+        options: [{ name: 'dataset', description: 'Dataset name', type: 'string', required: true }],
+      },
+    ],
+  },
+  {
     name: 'knowledge',
     description: 'Search the knowledge vault',
     options: [

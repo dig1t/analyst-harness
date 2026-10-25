@@ -64,6 +64,20 @@ export interface HarnessOps {
     taskType?: string,
   ): Array<{ context: string; profileId: string; mean: number; pulls: number; avgCostUsd: number }>;
   status(): Record<string, string | number>;
+  dashboards(): Promise<DashboardInfo[]>;
+  /** One dashboard; `html` is included when the file is small enough to attach. */
+  dashboard(slug: string): Promise<(DashboardInfo & { html?: string }) | undefined>;
+  exploreDataset(dataset: string): Promise<DashboardInfo & { html?: string; warnings: string[] }>;
+}
+
+export interface DashboardInfo {
+  slug: string;
+  title: string;
+  description?: string;
+  builtAt: string;
+  url?: string;
+  bytes: number;
+  rows: number;
 }
 
 export interface RouterOptions {
@@ -200,6 +214,8 @@ export class CommandRouter {
       }
       case 'skills':
         return this.skills(inv, r);
+      case 'dashboard':
+        return this.dashboard(inv, r);
       case 'knowledge':
       case 'lessons': {
         const query = str(o.query) ?? (inv.command === 'lessons' ? 'lesson' : '');
@@ -292,6 +308,52 @@ export class CommandRouter {
     }
   }
 
+  private async dashboard(inv: Invocation, r: Responder): Promise<void> {
+    const describe = (d: DashboardInfo) =>
+      `**${d.title}** \`${d.slug}\`${d.url ? ` <${d.url}>` : ''}\n${d.rows.toLocaleString('en-US')} rows, built ${d.builtAt.slice(0, 16).replace('T', ' ')} UTC`;
+    const attach = (d: DashboardInfo & { html?: string }) =>
+      d.html ? { name: `${d.slug}.html`, content: d.html } : undefined;
+    const unattached = (d: DashboardInfo & { html?: string }) =>
+      d.html
+        ? ''
+        : `\nThe file is too large to attach here; ${d.url ? 'open the link' : `it is in dashboards/${d.slug}/ on the server`}.`;
+    switch (inv.subcommand) {
+      case 'list': {
+        const list = await this.ops.dashboards();
+        if (!list.length)
+          return r.finish({
+            content:
+              'No dashboards yet. Build an explorer with `/dashboard explore dataset:<name>`, or ask for one with `/ask`.',
+          });
+        return r.finish(
+          fitMessage(
+            `**${list.length} dashboard${list.length === 1 ? '' : 's'}**`,
+            list.map((d) => `- ${describe(d).replace('\n', ' \u00b7 ')}`).join('\n'),
+            'dashboards.md',
+          ),
+        );
+      }
+      case 'get': {
+        const slug = str(inv.options.name);
+        if (!slug) return r.finish({ content: 'Usage: /dashboard get name:<slug>', ephemeral: true });
+        const d = await this.ops.dashboard(slug);
+        if (!d) return r.finish({ content: `No dashboard ${slug}. See /dashboard list.`, ephemeral: true });
+        return r.finish({ content: `${describe(d)}${unattached(d)}`, file: attach(d) });
+      }
+      case 'explore': {
+        const dataset = str(inv.options.dataset);
+        if (!dataset)
+          return r.finish({ content: 'Usage: /dashboard explore dataset:<name>', ephemeral: true });
+        await r.defer();
+        const d = await this.ops.exploreDataset(dataset);
+        const warnings = d.warnings.length ? `\nWarnings: ${d.warnings.slice(0, 3).join('; ')}` : '';
+        return r.finish({ content: `${describe(d)}${warnings}${unattached(d)}`, file: attach(d) });
+      }
+      default:
+        return r.finish({ content: 'Usage: /dashboard list | get | explore', ephemeral: true });
+    }
+  }
+
   private async skills(inv: Invocation, r: Responder): Promise<void> {
     const name = str(inv.options.name);
     switch (inv.subcommand) {
@@ -353,6 +415,8 @@ export function parsePrefixCommand(
         subcommand: rest[0],
         options: { name: rest[1], dry_run: rest.includes('--dry-run') },
       };
+    case 'dashboard':
+      return { command, subcommand: rest[0], options: { name: rest[1], dataset: rest[1] } };
     case 'run':
     case 'stop':
       return { command, options: { id: rest[0] } };

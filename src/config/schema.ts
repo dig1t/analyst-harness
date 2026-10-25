@@ -125,6 +125,19 @@ export const HarnessConfigSchema = z
         digestEnabled: true,
       }),
     vault: z.object({ lintSchedule: cron.default('41 4 * * 0') }).default({ lintSchedule: '41 4 * * 0' }),
+    dashboards: z
+      .object({
+        /** Where dashboards are written (defaults to <data>/dashboards). */
+        dir: z.string().optional(),
+        /** Serve /dashboards/ on the web port; DASHBOARD_PASSWORD turns on basic auth. */
+        serve: z.boolean().default(true),
+        /** Keep an explorer dashboard per dataset, rebuilt after each scrape that adds data. */
+        autoExplore: z.boolean().default(true),
+        /** Largest dashboard file in MB (the data is embedded in the page). */
+        maxMb: z.number().min(1).max(200).default(25),
+      })
+      .strict()
+      .default({ serve: true, autoExplore: true, maxMb: 25 }),
     discord: z
       .object({
         prefixCommands: z.boolean().default(false),
@@ -142,6 +155,14 @@ export const HarnessConfigSchema = z
 
 export type HarnessConfigInput = z.input<typeof HarnessConfigSchema>;
 export type HarnessFileConfig = z.infer<typeof HarnessConfigSchema>;
+
+export interface DashboardSettings {
+  /** Basic-auth password for /dashboards/ (DASHBOARD_PASSWORD); no auth when unset. */
+  password?: string;
+  user: string;
+  /** Base URL that serves the harness web port, for links in Discord (DASHBOARD_PUBLIC_URL). */
+  publicUrl?: string;
+}
 
 export interface DiscordSettings {
   token?: string;
@@ -172,6 +193,8 @@ export interface HarnessConfig extends HarnessFileConfig {
     runs: string;
     state: string;
     datasets: string;
+    dashboards: string;
   };
   discordEnv: DiscordSettings;
+  dashboardEnv: DashboardSettings;
 }

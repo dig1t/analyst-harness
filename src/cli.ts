@@ -1,10 +1,14 @@
 #!/usr/bin/env node
+import { promises as fsp } from 'node:fs';
+import path from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { parseArgs } from 'node:util';
 import { HarnessRuntime } from './app/runtime';
 import { main } from './index';
 import { loadConfig } from './config/load';
 import type { AgentEvent } from './core/agent-loop';
+import { loadUiAssets } from './dashboards/assets';
+import { DashboardService } from './dashboards/service';
 import { toDiscordJson } from './discord/commands';
 import { DiscordApprovalGateway } from './discord/approvals';
 import type { ApprovalGateway } from './safety/permissions';
@@ -26,6 +30,9 @@ Usage: harness <command> [options]
   profiles                                                        Show what the profile bandit learned
   skills [list|proposed|approve <name>|reject <name>]             Manage skills
   vault lint [--strict] | vault index | vault search "<query>"    Knowledge vault tools
+  dashboard build <spec.yaml> | dashboard list | dashboard remove <slug>
+                                                                  Build and manage dashboards
+  explore <dataset>                                               Build the explorer dashboard for a dataset
   discord commands                                                Print the slash command JSON
   doctor                                                          Check configuration and dependencies
 `;
@@ -227,6 +234,40 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
         io.err('Usage: harness vault lint|index|search');
         return 2;
       }
+      case 'dashboard': {
+        const sub = positionals[0];
+        if (sub === 'build' && positionals[1]) {
+          // The spec path is relative to your shell; file sources inside it resolve against the workspace.
+          const text = await fsp.readFile(path.resolve(positionals[1]), 'utf8');
+          const built = await rt.dashboards.build(text, { source: 'cli' });
+          io.out(DashboardService.summary(built, built.path));
+          return 0;
+        }
+        if (sub === 'list') {
+          for (const m of await rt.dashboards.list())
+            io.out(
+              `${m.slug.padEnd(32)} ${m.builtAt.slice(0, 16).replace('T', ' ')}  ${m.title}${rt.dashboards.url(m.slug) ? `  ${rt.dashboards.url(m.slug)}` : ''}`,
+            );
+          return 0;
+        }
+        if (sub === 'remove' && positionals[1]) {
+          const removed = await rt.dashboards.remove(positionals[1]);
+          io.out(removed ? `removed ${positionals[1]}` : `no dashboard ${positionals[1]}`);
+          return removed ? 0 : 1;
+        }
+        io.err('Usage: harness dashboard build <spec.yaml> | list | remove <slug>');
+        return 2;
+      }
+      case 'explore': {
+        const dataset = positionals[0];
+        if (!dataset) {
+          io.err('Usage: harness explore <dataset>');
+          return 2;
+        }
+        const built = await rt.dashboards.explore(dataset);
+        io.out(DashboardService.summary(built, built.path));
+        return 0;
+      }
       case 'doctor': {
         const checks: Array<[string, boolean, string]> = [
           [
@@ -263,6 +304,21 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
             `${rt.skills.list().length} skills${rt.skills.issues.length ? `, ${rt.skills.issues.length} skipped` : ''}`,
           ],
           ['scrapers loaded', true, `${rt.scrapers.all().length} specs`],
+          [
+            'dashboard UI assets',
+            await loadUiAssets().then(
+              () => true,
+              () => false,
+            ),
+            'run `npm run build:ui` if this fails',
+          ],
+          [
+            'dashboards protected',
+            !config.dashboards.serve || !!config.dashboardEnv.password,
+            config.dashboards.serve
+              ? 'set DASHBOARD_PASSWORD, or keep the web port private'
+              : 'not served (dashboards.serve: false)',
+          ],
           [
             'vault articles',
             (await rt.vault.articles()).length > 0,

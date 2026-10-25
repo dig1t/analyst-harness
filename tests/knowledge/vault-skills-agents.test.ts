@@ -253,9 +253,16 @@ describe('SkillRegistry', () => {
       'data-quality-checks',
       'discord-report',
       'responsible-scraping',
+      'build-dashboard',
     ]) {
       expect(names).toContain(n);
     }
+    expect(reg.get('build-dashboard')!.files).toEqual(
+      expect.arrayContaining([
+        'skills/harness/build-dashboard/reference.md',
+        'skills/harness/build-dashboard/examples/release-tracker.yaml',
+      ]),
+    );
     expect(reg.get('karpathy-llm-wiki')!.files).toEqual(
       expect.arrayContaining([
         'skills/karpathy-llm-wiki/scripts/check_evidence.py',
@@ -289,6 +296,7 @@ describe('agent definitions', () => {
     const agents = await loadAgents(path.resolve(__dirname, '../../agents'));
     expect([...agents.keys()].sort()).toEqual([
       'analyst',
+      'dashboard-builder',
       'librarian',
       'reporter',
       'scraper-engineer',

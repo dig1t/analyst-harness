@@ -62,6 +62,8 @@ export class KpiTile implements Component {
       def.value.agg === 'count' || def.value.agg === 'distinct' ? 'integer' : (col?.type ?? 'number'),
       app.locale,
     );
+    // A column format (bytes, currency) already reads compactly; plain numbers get K and M.
+    if (col?.format) return base;
     return (v) => (typeof v === 'number' && Math.abs(v) >= 10_000 ? compactNumber(v, app.locale) : base(v));
   }
 

@@ -75,12 +75,25 @@ export interface SqlService {
   release?(runId: string): void;
 }
 
+export interface DashboardToolService {
+  /** Build and publish a dashboard; `summary` is the model-facing result. */
+  build(
+    spec: unknown,
+    ctx: Pick<ToolContext, 'runId' | 'workspace'>,
+  ): Promise<{ summary: string; displayPath: string }>;
+  profile(
+    src: { dataset?: string; sql?: string; file?: string; limit?: number },
+    ctx: Pick<ToolContext, 'runId' | 'workspace'>,
+  ): Promise<string>;
+}
+
 export interface ToolServices {
   knowledge?: KnowledgeService;
   skills?: SkillService;
   delegate?: DelegateService;
   scrapers?: ScraperService;
   sql?: SqlService;
+  dashboards?: DashboardToolService;
   fetch?: typeof fetch;
 }
 

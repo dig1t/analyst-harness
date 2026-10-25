@@ -11,3 +11,5 @@ knowledge/.obsidian/workspace.json
 knowledge/.obsidian/workspace-mobile.json
 knowledge/.obsidian/cache
 knowledge/.trash/
+test-results/
+playwright-report/

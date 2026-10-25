@@ -11,6 +11,9 @@ COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
+# The dashboard UI is bundled into dist/ui and inlined into every dashboard file.
+COPY ui ./ui
+COPY scripts ./scripts
 RUN npm run build \
   && if [ "$WITH_DUCKDB" = "true" ]; then npm prune --omit=dev; else npm prune --omit=dev --omit=optional; fi
 

@@ -22,7 +22,8 @@ src/index.ts
     LearningService                 judge, bandit updates, reflection, skill proposals
     Notifier                        console, Discord webhooks, the bot
   DiscordBot                        slash commands, buttons, progress messages (optional)
-  http /healthz                     status JSON for container health checks
+  DashboardService                  specs -> data/dashboards/<slug>/ (HTML, spec, notebook, meta)
+  web port                          /healthz, /dashboards/ catalog and pages (src/app/http.ts)
 ```
 
 ## A run, step by step

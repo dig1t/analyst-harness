@@ -2,6 +2,7 @@ import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import { HarnessRuntime } from '../../src/app/runtime';
 import { loadConfig } from '../../src/config/load';
+import type { ToolResultBlock } from '../../src/core/types';
 import type { CompletionRequest } from '../../src/llm/provider';
 import { ScriptedProvider, type ScriptedTurn } from '../../src/llm/scripted';
 import type { Notification } from '../../src/discord/notifier';
@@ -125,7 +126,7 @@ describe('HarnessRuntime', () => {
     expect(rt.agentList().map((a) => a.name)).toContain('verifier');
   });
 
-  test('workspaces mount datasets, knowledge, skills and scrapers per agent', async () => {
+  test('workspaces mount datasets, dashboards, knowledge, skills and scrapers per agent', async () => {
     const { rt } = await makeRuntime(() => ({ text: 'ok' }), {
       'agents/librarian.md':
         '---\nname: librarian\ndescription: l\nknowledge: rw\nscrapers: none\nskills: none\n---\nx',
@@ -135,8 +136,15 @@ describe('HarnessRuntime', () => {
         .workspaceFor(rt.agent(name))
         .allMounts.map((m) => `${m.alias || '.'}:${m.mode}`)
         .sort();
-    expect(aliases('analyst')).toEqual(['.:rw', 'datasets:ro', 'knowledge:ro', 'scrapers:ro', 'skills:ro']);
-    expect(aliases('librarian')).toEqual(['.:rw', 'datasets:ro', 'knowledge:rw']);
+    expect(aliases('analyst')).toEqual([
+      '.:rw',
+      'dashboards:ro',
+      'datasets:ro',
+      'knowledge:ro',
+      'scrapers:ro',
+      'skills:ro',
+    ]);
+    expect(aliases('librarian')).toEqual(['.:rw', 'dashboards:ro', 'datasets:ro', 'knowledge:rw']);
     const cron = rt.permissionsFor('cron');
     expect(cron.policy.askFallback).toBe('deny');
     expect(cron.classifyBash('ls -la')).toBe('allow');
@@ -198,7 +206,8 @@ describe('HarnessRuntime', () => {
         .map((j) => j.name)
         .sort(),
     ).toEqual(['digest', 'learning', 'scrape:items', 'vault-lint']);
-    expect(await rt.scheduledScrape('items')).toBe('ok: 2 new, 0 changed');
+    // The first data for a dataset also creates its explorer dashboard.
+    expect(await rt.scheduledScrape('items')).toBe('ok: 2 new, 0 changed; rebuilt explore-items');
     expect(notes.at(-1)).toMatchObject({
       channel: 'reports',
       title: 'items: 2 new records',
@@ -272,6 +281,59 @@ describe('HarnessRuntime', () => {
     expect(ops.status()).toMatchObject({ provider: 'scripted', scrapers: 1, skills: 1 });
     expect(ops.jobs()).toEqual([]);
     expect(await ops.learn()).toBeGreaterThanOrEqual(1);
+  });
+
+  test('dashboards: agents build them, scrapes refresh them, the bot lists and attaches them', async () => {
+    let items = [{ id: 1 }, { id: 2 }];
+    const spec = {
+      title: 'Item board',
+      data: { items: { dataset: 'items' } },
+      items: [
+        { type: 'kpi', title: 'Items', value: 'count' },
+        { type: 'table', columns: ['id'] },
+      ],
+    };
+    const { rt, provider } = await makeRuntime(
+      (req, i) => {
+        if (req.purpose !== 'agent') return { text: '{}' };
+        if (i === 0) return { toolCalls: [{ name: 'profile_data', input: { dataset: 'items' } }] };
+        if (i === 1) return { toolCalls: [{ name: 'build_dashboard', input: { spec } }] };
+        return { text: 'Built the item board.' };
+      },
+      { 'config/harness.yaml.extra': '' },
+      { 'https://api.test/items': () => ({ body: items }) },
+    );
+    expect(await rt.scheduledScrape('items')).toContain('rebuilt explore-items');
+    const result = await rt.runTask({ task: 'Make a dashboard of the items', source: 'cli' });
+    expect(result.outcome).toBe('completed');
+    const toolResults = provider.requests
+      .flatMap((r) => r.messages)
+      .flatMap((m) => (Array.isArray(m.content) ? m.content : []))
+      .filter((b): b is ToolResultBlock => b.type === 'tool_result')
+      .map((b) => b.content);
+    expect(toolResults.join('\n')).toContain('Dataset items: 2 rows, 5 columns');
+    expect(toolResults.join('\n')).toContain('_scraped_at is when each row was scraped');
+    expect(toolResults.join('\n')).not.toContain('measures: _key');
+    expect(toolResults.join('\n')).toContain('Built dashboard "Item board" (item-board)');
+    const board = await rt.dashboards.get('item-board');
+    expect(board).toMatchObject({ runId: result.runId, source: 'agent', dependsOn: ['items'] });
+
+    // New records rebuild every on-new-data dashboard that reads the dataset.
+    items = [{ id: 1 }, { id: 2 }, { id: 3 }];
+    expect(await rt.scheduledScrape('items')).toBe('ok: 1 new, 0 changed; rebuilt item-board, explore-items');
+    expect((await rt.dashboards.get('item-board'))!.datasets[0]!.rows).toBe(3);
+    // Nothing new, nothing rebuilt.
+    expect(await rt.scheduledScrape('items')).toBe('ok: 0 new, 0 changed');
+
+    const ops = rt.ops();
+    expect((await ops.dashboards()).map((d) => d.slug).sort()).toEqual(['explore-items', 'item-board']);
+    const got = await ops.dashboard('item-board');
+    expect(got).toMatchObject({ title: 'Item board', rows: 3 });
+    expect(got!.html).toContain('<title>Item board</title>');
+    expect(await ops.dashboard('nope')).toBeUndefined();
+    const ex = await ops.exploreDataset('items');
+    expect(ex).toMatchObject({ slug: 'explore-items', title: 'items explorer' });
+    await expect(ops.exploreDataset('ghost')).rejects.toThrow('no dataset "ghost"');
   });
 
   test('runs can be stopped while in flight', async () => {

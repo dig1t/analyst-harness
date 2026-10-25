@@ -11,6 +11,7 @@ import {
   drawLogAxis,
   drawNumberAxis,
   drawYAxis,
+  fieldFormat,
   frame,
   tickFormatter,
   yLabelWidth,
@@ -61,12 +62,9 @@ export class HistogramChart extends ChartComponent<ComponentOf<'histogram'>> {
     const axes = s('g', { class: 'hx-axes' });
     svg.appendChild(axes);
     drawYAxis(axes, f, y, ticks, step, yFmt);
-    const fmt = makeFormatter(
-      def.format,
-      app.store.column(def.data, def.field)?.type ?? 'number',
-      app.locale,
-    );
-    const tickFmt = tickFormatter(app, def.format);
+    const format = fieldFormat(app, def.data, def.field, def.format);
+    const fmt = makeFormatter(format, app.store.column(def.data, def.field)?.type ?? 'number', app.locale);
+    const tickFmt = tickFormatter(app, format);
     if (log) drawLogAxis(axes, f, px, tickFmt);
     else drawNumberAxis(axes, f, px, tickFmt);
     const marks = s('g', { class: 'hx-marks' });
@@ -142,7 +140,7 @@ export class HistogramChart extends ChartComponent<ComponentOf<'histogram'>> {
   protected tableData(): TableData {
     const { def, app } = this;
     const fmt = makeFormatter(
-      def.format,
+      fieldFormat(app, def.data, def.field, def.format),
       app.store.column(def.data, def.field)?.type ?? 'number',
       app.locale,
     );

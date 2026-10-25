@@ -54,6 +54,7 @@ class DashboardApp implements App {
   readonly spec: PagePayload['spec'];
   readonly locale: string;
   readonly downloads: boolean;
+  private readonly served: boolean;
   readonly filters: PagePayload['spec']['filters'];
   private readonly components: Component[] = [];
   private readonly bar: FilterBar;
@@ -66,6 +67,10 @@ class DashboardApp implements App {
     this.spec = payload.spec;
     this.locale = payload.spec.locale || 'en-US';
     this.downloads = payload.meta.mode !== 'embedded';
+    // A built file opened over http(s) is being served (by the harness or any static host).
+    this.served =
+      payload.meta.mode === 'served' ||
+      (payload.meta.mode === 'standalone' && /^https?:$/.test(location.protocol));
     this.filters = payload.spec.filters.filter((f) => f.datasets.length > 0);
     this.store = new Store(payload.datasets);
     for (const f of this.filters) {
@@ -179,7 +184,7 @@ class DashboardApp implements App {
       h(
         'div',
         { class: 'hx-header-actions' },
-        this.payload.meta.mode === 'served'
+        this.served
           ? h(
               'button',
               {
@@ -222,7 +227,11 @@ class DashboardApp implements App {
             },
           },
           icon(mode === 'auto' ? 'auto' : mode === 'light' ? 'sun' : 'moon'),
-          h('span', { class: 'hx-visually-hidden' }, mode),
+          h(
+            'span',
+            { class: 'hx-visually-hidden' },
+            mode === 'auto' ? 'System theme' : mode === 'light' ? 'Light theme' : 'Dark theme',
+          ),
         ),
       ),
     );
@@ -295,7 +304,7 @@ class DashboardApp implements App {
         { class: 'hx-meta hx-generator' },
         `Made with ${this.payload.meta.generator}`,
         this.payload.meta.runId ? ` in run ${this.payload.meta.runId}` : '',
-        this.payload.meta.notebook && this.payload.meta.mode === 'served'
+        this.payload.meta.notebook && this.served
           ? [
               '. ',
               h(

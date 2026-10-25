@@ -88,6 +88,11 @@ export function tickFormatter(app: App, format: string | undefined): (v: number,
   return (v, step) => formatTick(v, step, app.locale);
 }
 
+/** A field's format: the component's own, else the one set on the column. */
+export function fieldFormat(app: App, data: string, field: string, explicit?: string): string | undefined {
+  return explicit ?? app.store.column(data, field)?.format;
+}
+
 /** Display text for a category key: Yes and No for booleans, the key itself otherwise. */
 export function keyLabel(app: App, data: string, field: string): (key: string) => string {
   const col = app.store.column(data, field);

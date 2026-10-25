@@ -300,9 +300,26 @@ function fakeOps(overrides: Partial<HarnessOps> = {}): HarnessOps {
       },
     ],
     status: () => ({ uptime: '5 min', 'active runs': 0 }),
+    dashboards: async () => [dashboardInfo],
+    dashboard: async (slug) => (slug === 'sales' ? { ...dashboardInfo, html: '<!doctype html>' } : undefined),
+    exploreDataset: jest.fn(async (dataset: string) => ({
+      ...dashboardInfo,
+      slug: `explore-${dataset}`,
+      title: `${dataset} explorer`,
+      warnings: ['facets: dropped id (all values distinct)'],
+    })),
     ...overrides,
   };
 }
+
+const dashboardInfo = {
+  slug: 'sales',
+  title: 'Sales',
+  builtAt: '2026-10-25T08:00:00.000Z',
+  url: 'https://harness.example/dashboards/sales/',
+  bytes: 4096,
+  rows: 1234,
+};
 
 function responder() {
   const log: Array<{ kind: string; value?: unknown }> = [];
@@ -469,6 +486,44 @@ describe('CommandRouter', () => {
     expect(await call('scrape', 'run', { name: 'zz' })).toMatchObject({
       ephemeral: true,
       content: 'Error: unknown scraper zz',
+    });
+  });
+
+  test('dashboard list, get (with the HTML attached) and explore', async () => {
+    const ops = fakeOps();
+    const router = new CommandRouter(ops, policy);
+    let r = responder();
+    await router.dispatch(inv('dashboard', {}, 'list'), r);
+    expect(r.replies[0]!.content).toContain('**1 dashboard**');
+    expect(r.replies[0]!.content).toContain('<https://harness.example/dashboards/sales/>');
+    expect(r.replies[0]!.content).toContain('1,234 rows');
+    r = responder();
+    await router.dispatch(inv('dashboard', { name: 'sales' }, 'get'), r);
+    expect(r.replies[0]!.file).toEqual({ name: 'sales.html', content: '<!doctype html>' });
+    r = responder();
+    await router.dispatch(inv('dashboard', { name: 'nope' }, 'get'), r);
+    expect(r.replies[0]).toMatchObject({ ephemeral: true });
+    expect(r.replies[0]!.content).toContain('No dashboard nope');
+    r = responder();
+    await router.dispatch(inv('dashboard', { dataset: 'hn' }, 'explore'), r);
+    expect(r.log[0]).toEqual({ kind: 'defer', value: undefined });
+    expect(ops.exploreDataset).toHaveBeenCalledWith('hn');
+    expect(r.replies[0]!.content).toContain('**hn explorer** `explore-hn`');
+    expect(r.replies[0]!.content).toContain('Warnings: facets: dropped id');
+    expect(r.replies[0]!.content).toContain('too large to attach');
+    r = responder();
+    await router.dispatch(inv('dashboard', {}, 'explore'), r);
+    expect(r.replies[0]!.content).toContain('Usage: /dashboard explore');
+    r = responder();
+    await new CommandRouter(fakeOps({ dashboards: async () => [] }), policy).dispatch(
+      inv('dashboard', {}, 'list'),
+      r,
+    );
+    expect(r.replies[0]!.content).toContain('No dashboards yet');
+    expect(parsePrefixCommand('!dashboard get sales')).toEqual({
+      command: 'dashboard',
+      subcommand: 'get',
+      options: { name: 'sales', dataset: 'sales' },
     });
   });
 

@@ -71,6 +71,12 @@ scrapers:
 vault:
   lintSchedule: '41 4 * * 0'
 
+dashboards:
+  # dir: ./data/dashboards # default: <data>/dashboards
+  serve: true # serve /dashboards/ on PORT; set DASHBOARD_PASSWORD for basic auth (docs/dashboards.md)
+  autoExplore: true # keep an explorer dashboard per dataset, rebuilt when a scrape adds data
+  maxMb: 25 # data is embedded in each page; larger builds fail with a hint to aggregate in SQL
+
 discord:
   prefixCommands: false # true also accepts "!ask ..." messages (needs the Message Content intent)
   approvalTimeoutSec: 300

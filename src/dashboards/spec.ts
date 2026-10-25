@@ -403,16 +403,14 @@ export function parseDashboardSpec(input: unknown): DashboardSpec {
 }
 
 function getAt(obj: unknown, path: ReadonlyArray<PropertyKey>): unknown {
+  // The preprocess step moves a flat `items` list under one section; issue paths follow it.
+  const o = obj as Record<string, unknown> | null;
+  if (o && typeof o === 'object' && Array.isArray(o.items) && !('sections' in o) && path[0] === 'sections')
+    obj = { sections: [{ items: o.items }] };
   let cur: unknown = obj;
   for (const p of path) {
     if (cur === null || typeof cur !== 'object') return undefined;
     cur = (cur as Record<PropertyKey, unknown>)[p];
-  }
-  if (cur === undefined && path.length && typeof obj === 'object') {
-    // The preprocess step may have moved `items` under a section.
-    const o = obj as Record<string, unknown>;
-    if (Array.isArray(o.items) && path[0] === 'sections')
-      return getAt({ sections: [{ items: o.items }] }, path);
   }
   return cur;
 }

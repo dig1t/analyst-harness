@@ -47,8 +47,11 @@ To build on the server instead of pulling, clone the repository and run
   new seed files from an upgraded image are added. A deleted seed file comes back on restart,
   so disable a scraper with `enabled: false` instead of deleting its spec.
 - Learned and proposed skills go to `/app/data/skills`; the built-in skills stay in the image.
-- Serves `/healthz` on port 8080, bound to the host's loopback by compose. The image has a
-  Docker `HEALTHCHECK` that calls it.
+- Serves `/healthz` and the dashboards (`/dashboards/`) on port 8080, bound to the host's
+  loopback by compose. The image has a Docker `HEALTHCHECK` that calls `/healthz`. To read
+  dashboards remotely, use an SSH tunnel, a private network, or a TLS proxy with
+  `DASHBOARD_PASSWORD` set ([dashboards.md](dashboards.md)). Dashboards live on the volume
+  under `/app/data/dashboards`.
 - Logs JSON lines to stdout; compose rotates them (3 files of 10 MB).
 
 ## Operating it

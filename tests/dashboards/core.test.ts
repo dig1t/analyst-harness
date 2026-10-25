@@ -22,6 +22,8 @@ import {
 import {
   coerceValue,
   describeProfile,
+  guessFormat,
+  humanizeName,
   inferColumns,
   inferType,
   normalizeRows,
@@ -296,6 +298,22 @@ describe('formatting', () => {
     expect(formatBytes(512.4)).toBe('512 B');
     expect(formatDuration(0)).toBe('0s');
     expect(formatDuration(90061)).toBe('1d 1h');
+  });
+
+  test('name hints: formats for sizes and durations, readable labels', () => {
+    expect(guessFormat('size_bytes', 'integer')).toBe('bytes');
+    expect(guessFormat('bytes', 'number')).toBe('bytes');
+    expect(guessFormat('wait_seconds', 'number')).toBe('duration');
+    expect(guessFormat('size_bytes', 'string')).toBeUndefined();
+    expect(guessFormat('score', 'integer')).toBeUndefined();
+    expect(inferColumns([{ size_bytes: 10 }])[0]).toMatchObject({ format: 'bytes' });
+    expect(inferColumns([{ size_bytes: 10 }], { size_bytes: { format: 'integer' } })[0]!.format).toBe(
+      'integer',
+    );
+    expect(humanizeName('released_at')).toBe('Released at');
+    expect(humanizeName('requestsPerSecond')).toBe('Requests per second');
+    expect(humanizeName('story_url')).toBe('Story URL');
+    expect(humanizeName('_scraped_at')).toBe('Scraped at');
   });
 
   test('dates, booleans, urls and text', () => {

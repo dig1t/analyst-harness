@@ -12,6 +12,7 @@ import {
   drawNumberAxis,
   drawTimeAxis,
   drawYAxis,
+  fieldFormat,
   frame,
   keyLabel,
   legend,
@@ -108,7 +109,9 @@ export class ScatterChart extends ChartComponent<ComponentOf<'scatter'>> {
     const ys = pts.map((p) => p.y);
     const yLo = Math.min(...ys);
     const yHi = Math.max(...ys);
-    const baseYFmt = tickFormatter(app, def.y.format);
+    const xFormat = fieldFormat(app, def.data, def.x.field, def.x.format);
+    const yFormat = fieldFormat(app, def.data, def.y.field, def.y.format);
+    const baseYFmt = tickFormatter(app, yFormat);
     // On a log axis each tick sets its own precision (0.01, 0.1, 1, 10).
     const yFmt = yLog ? (v: number) => baseYFmt(v, v) : baseYFmt;
     // Log ticks run from decade to decade, so the outer ticks bound the domain either way.
@@ -142,8 +145,8 @@ export class ScatterChart extends ChartComponent<ComponentOf<'scatter'>> {
     svg.appendChild(axes);
     drawYAxis(axes, f, y, yTicks.ticks, yTicks.step, yFmt);
     if (xTime) drawTimeAxis(axes, f, x, xDomain[0], xDomain[1], app.locale);
-    else if (xLog) drawLogAxis(axes, f, x, tickFormatter(app, def.x.format));
-    else drawNumberAxis(axes, f, x, tickFormatter(app, def.x.format));
+    else if (xLog) drawLogAxis(axes, f, x, tickFormatter(app, xFormat));
+    else drawNumberAxis(axes, f, x, tickFormatter(app, xFormat));
     const colorOf = sField ? seriesPalette(app, def.data, sField, order) : () => 'var(--series-1)';
     const seriesLabel = sField ? keyLabel(app, def.data, sField) : (k: string) => k;
     const marks = s('g', { class: 'hx-marks' });
@@ -221,12 +224,8 @@ export class ScatterChart extends ChartComponent<ComponentOf<'scatter'>> {
       height: f.y0 - f.y1 + 16,
     });
     svg.append(ring, overlay);
-    const xFmt = makeFormatter(def.x.format, xCol?.type ?? 'number', app.locale);
-    const yValFmt = makeFormatter(
-      def.y.format,
-      store.column(def.data, def.y.field)?.type ?? 'number',
-      app.locale,
-    );
+    const xFmt = makeFormatter(xFormat, xCol?.type ?? 'number', app.locale);
+    const yValFmt = makeFormatter(yFormat, store.column(def.data, def.y.field)?.type ?? 'number', app.locale);
     const xName = def.x.label ?? columnLabel(app, def.data, def.x.field);
     const yName = def.y.label ?? columnLabel(app, def.data, def.y.field);
     overlay.addEventListener('pointermove', (ev) => {
@@ -288,13 +287,13 @@ export class ScatterChart extends ChartComponent<ComponentOf<'scatter'>> {
         key: def.x.field,
         label: def.x.label ?? columnLabel(app, def.data, def.x.field),
         type: store.column(def.data, def.x.field)?.type ?? 'number',
-        format: def.x.format,
+        format: fieldFormat(app, def.data, def.x.field, def.x.format),
       },
       {
         key: def.y.field,
         label: def.y.label ?? columnLabel(app, def.data, def.y.field),
         type: store.column(def.data, def.y.field)?.type ?? 'number',
-        format: def.y.format,
+        format: fieldFormat(app, def.data, def.y.field, def.y.format),
       },
     );
     if (def.series)

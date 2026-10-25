@@ -46,6 +46,7 @@ export async function loadConfig(
   if (env.HARNESS_LEARNED_SKILLS_DIR) cfg.paths.learnedSkills = env.HARNESS_LEARNED_SKILLS_DIR;
   if (env.HARNESS_SCRAPERS_DIR) cfg.paths.scrapers = env.HARNESS_SCRAPERS_DIR;
   if (env.HARNESS_AGENTS_DIR) cfg.paths.agents = env.HARNESS_AGENTS_DIR;
+  if (env.HARNESS_DASHBOARDS_DIR) cfg.dashboards.dir = env.HARNESS_DASHBOARDS_DIR;
   if (env.HARNESS_MODEL) cfg.models.default = env.HARNESS_MODEL;
   if (env.HARNESS_PROVIDER === 'anthropic' || env.HARNESS_PROVIDER === 'scripted')
     cfg.provider = env.HARNESS_PROVIDER;
@@ -73,6 +74,7 @@ export async function loadConfig(
       runs: path.join(data, 'runs'),
       state: path.join(data, 'state'),
       datasets: path.join(data, 'datasets'),
+      dashboards: cfg.dashboards.dir ? abs(cfg.dashboards.dir) : path.join(data, 'dashboards'),
     },
     discordEnv: {
       token: env.DISCORD_TOKEN || undefined,
@@ -86,6 +88,11 @@ export async function loadConfig(
       allowEveryone: env.DISCORD_ALLOW_EVERYONE === 'true',
       webhookReports: env.DISCORD_WEBHOOK_REPORTS_URL || undefined,
       webhookAlerts: env.DISCORD_WEBHOOK_ALERTS_URL || undefined,
+    },
+    dashboardEnv: {
+      password: env.DASHBOARD_PASSWORD || undefined,
+      user: env.DASHBOARD_USER || 'harness',
+      publicUrl: env.DASHBOARD_PUBLIC_URL?.replace(/\/+$/, '') || undefined,
     },
   };
 }

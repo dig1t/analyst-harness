@@ -3,6 +3,8 @@ import path from 'node:path';
 import YAML from 'yaml';
 import { FALLBACK_AGENT, loadAgents, type AgentDefinition } from '../agents/definition';
 import type { HarnessConfig } from '../config/schema';
+import { explorerSlug } from '../dashboards/explorer';
+import { DashboardService, type DashboardMeta } from '../dashboards/service';
 import { runAgent, type AgentEvent, type RunResult } from '../core/agent-loop';
 import { resolveProfile, type HarnessProfile } from '../core/profiles';
 import { denyAllGateway } from '../discord/approvals';
@@ -13,7 +15,7 @@ import {
   type Notification,
   type Notifier,
 } from '../discord/notifier';
-import type { HarnessOps } from '../discord/router';
+import type { DashboardInfo, HarnessOps } from '../discord/router';
 import { KnowledgeVault } from '../knowledge/vault';
 import { AnthropicProvider } from '../llm/anthropic';
 import { PriceBook } from '../llm/pricing';
@@ -41,6 +43,7 @@ import { formatScrapeReport, ScraperRunner, type ScrapeReport } from '../scraper
 import { parseScraperSpec } from '../scrapers/spec';
 import { SkillRegistry } from '../skills/registry';
 import { bashTool } from '../tools/bash-tool';
+import { dashboardTools } from '../tools/dashboard-tools';
 import { fileTools } from '../tools/fs-tools';
 import { harnessTools } from '../tools/harness-tools';
 import { ToolRegistry } from '../tools/registry';
@@ -59,6 +62,9 @@ import { newId } from '../util/ids';
 import { createLogger, type Logger } from '../util/logger';
 import { errorMessage } from '../util/errors';
 import { formatUsd } from '../util/text';
+
+/** Discord's upload limit for bots, with headroom. */
+const DISCORD_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 
 export interface RunTaskRequest {
   task: string;
@@ -89,9 +95,13 @@ export interface RuntimeOptions {
 export class HarnessRuntime {
   readonly logger: Logger;
   readonly priceBook = new PriceBook();
-  readonly registry = new ToolRegistry([...fileTools, bashTool, webFetchTool, ...harnessTools] as Array<
-    ToolDefinition<never>
-  >);
+  readonly registry = new ToolRegistry([
+    ...fileTools,
+    bashTool,
+    webFetchTool,
+    ...harnessTools,
+    ...dashboardTools,
+  ] as Array<ToolDefinition<never>>);
   readonly scheduler: Scheduler;
   readonly notifier: MultiNotifier;
   private readonly notifiers: Notifier[] = [];
@@ -99,6 +109,8 @@ export class HarnessRuntime {
   private readonly startedAt = new Date();
   private agents = new Map<string, AgentDefinition>();
   private sql?: DuckDbSqlService;
+  /** Built in create(), after SQL, so dashboards can read query results. */
+  dashboards!: DashboardService;
   private readonly env: NodeJS.ProcessEnv;
 
   private constructor(
@@ -145,6 +157,7 @@ export class HarnessRuntime {
       config.resolved.runs,
       config.resolved.state,
       config.resolved.datasets,
+      config.resolved.dashboards,
     ])
       await ensureDir(dir);
 
@@ -222,6 +235,19 @@ export class HarnessRuntime {
     rt.agents = await loadAgents(config.resolved.agents);
     if (!rt.agents.has('analyst')) rt.agents.set('analyst', FALLBACK_AGENT);
     if (!opts.disableSql && (await DuckDbSqlService.isAvailable())) rt.sql = new DuckDbSqlService();
+    rt.dashboards = new DashboardService({
+      dir: config.resolved.dashboards,
+      datasetsDir: config.resolved.datasets,
+      dataDir: config.resolved.data,
+      workspaceDir: config.resolved.workspace,
+      sql: rt.sql,
+      logger: logger.child({ component: 'dashboards' }),
+      publicUrl: config.dashboardEnv.publicUrl,
+      maxBytes: Math.round(config.dashboards.maxMb * 1024 * 1024),
+      defaultWorkspace: () => rt.workspaceFor(rt.agent('analyst')),
+      describeDataset: (name) =>
+        rt.scrapers.all().find((s) => (s.output.dataset ?? s.name) === name)?.description,
+    });
     return rt;
   }
 
@@ -250,6 +276,8 @@ export class HarnessRuntime {
     const mounts: Mount[] = [
       { alias: '', dir: r.workspace, mode: 'rw' },
       { alias: 'datasets', dir: r.datasets, mode: 'ro' },
+      // Published dashboards (build_dashboard writes them); agents read specs back from here.
+      { alias: 'dashboards', dir: r.dashboards, mode: 'ro' },
     ];
     if (agent.knowledge !== 'none')
       mounts.push({ alias: 'knowledge', dir: r.knowledge, mode: agent.knowledge });
@@ -309,6 +337,18 @@ export class HarnessRuntime {
       skills: this.skills,
       delegate,
       sql: this.sql,
+      dashboards: {
+        build: async (spec, ctx) => {
+          const r = await this.dashboards.build(spec, {
+            runId: ctx.runId,
+            workspace: ctx.workspace,
+            source: 'agent',
+          });
+          const displayPath = `dashboards/${r.meta.slug}/index.html`;
+          return { summary: DashboardService.summary(r, displayPath), displayPath };
+        },
+        profile: (src, ctx) => this.dashboards.profile(src, ctx),
+      },
       scrapers: {
         list: () => this.scrapers.list(),
         run: (name, opts) => this.scrapers.run(name, opts),
@@ -355,11 +395,19 @@ export class HarnessRuntime {
   }
 
   private environmentBlock(workspace: Workspace): string {
+    const about: Record<string, string> = {
+      datasets: 'scraper outputs as JSONL, one folder per dataset',
+      dashboards: 'published dashboards, one folder per slug (spec.json is the spec that built it)',
+      knowledge: 'the knowledge vault (wiki/<topic>/<article>.md)',
+      skills: 'the skills library',
+      'learned-skills': 'skills the harness learned and a human approved',
+      scrapers: 'scraper specs (YAML)',
+    };
     const mounts = workspace.allMounts
       .filter((m) => m.alias)
       .map(
         (m) =>
-          `- ${m.alias}/ (${m.mode === 'ro' ? 'read-only' : 'read-write'}): ${m.alias === 'datasets' ? 'scraper outputs as JSONL, one folder per dataset' : m.alias === 'knowledge' ? 'the knowledge vault (wiki/<topic>/<article>.md)' : m.alias === 'skills' ? 'the skills library' : 'scraper specs (YAML)'}`,
+          `- ${m.alias}/ (${m.mode === 'ro' ? 'read-only' : 'read-write'}): ${about[m.alias] ?? m.alias}`,
       );
     return `# Environment\n\nToday is ${new Date().toISOString().slice(0, 10)} (UTC). Your working directory is the workspace root (read-write). Other folders are mounted under these prefixes:\n${mounts.join('\n')}`;
   }
@@ -471,7 +519,33 @@ export class HarnessRuntime {
     if (!spec) throw new Error(`unknown scraper ${name}`);
     const report = await this.scrapers.runReport(name);
     await this.reportScrape(spec.notify, report);
-    return `${report.ok ? 'ok' : 'problem'}: ${report.new} new, ${report.changed} changed`;
+    const rebuilt = await this.afterScrape(name, report);
+    return `${report.ok ? 'ok' : 'problem'}: ${report.new} new, ${report.changed} changed${rebuilt.length ? `; rebuilt ${rebuilt.join(', ')}` : ''}`;
+  }
+
+  /**
+   * After a scrape that wrote records: rebuild the dashboards that read the dataset and, with
+   * dashboards.autoExplore, create the dataset's explorer the first time. Failures are logged.
+   */
+  async afterScrape(name: string, report: ScrapeReport): Promise<string[]> {
+    if (report.dryRun || !report.ok || report.written === 0) return [];
+    const dataset = this.scrapers.get(name)?.output.dataset ?? name;
+    try {
+      const rebuilt = await this.dashboards.refreshFor([dataset]);
+      const explorer = explorerSlug(dataset);
+      if (
+        this.config.dashboards.autoExplore &&
+        !rebuilt.includes(explorer) &&
+        !(await this.dashboards.get(explorer))
+      ) {
+        await this.dashboards.explore(dataset);
+        rebuilt.push(explorer);
+      }
+      return rebuilt;
+    } catch (err) {
+      this.logger.warn('dashboard refresh after scrape failed', { scraper: name, err: errorMessage(err) });
+      return [];
+    }
   }
 
   async reportScrape(
@@ -627,6 +701,27 @@ Its spec is scrapers/${name}.yaml (read-only for you).
 
   // ----- operations for the Discord bot -----
 
+  private dashboardInfo(m: DashboardMeta): DashboardInfo {
+    return {
+      slug: m.slug,
+      title: m.title,
+      description: m.description,
+      builtAt: m.builtAt,
+      url: this.dashboards.url(m.slug),
+      bytes: m.bytes,
+      rows: m.datasets.reduce((n, d) => n + d.rows, 0),
+    };
+  }
+
+  /** The dashboard plus its HTML when small enough for a Discord attachment. */
+  private async dashboardWithHtml(m: DashboardMeta): Promise<DashboardInfo & { html?: string }> {
+    const info = this.dashboardInfo(m);
+    if (m.bytes > DISCORD_ATTACHMENT_BYTES) return info;
+    const file = this.dashboards.filePath(m.slug);
+    const html = file ? await fsp.readFile(file, 'utf8').catch(() => undefined) : undefined;
+    return { ...info, html };
+  }
+
   ops(): HarnessOps {
     return {
       ask: (task, o) =>
@@ -644,7 +739,10 @@ Its spec is scrapers/${name}.yaml (read-only for you).
         const spec = this.scrapers.get(name);
         if (!spec) throw new Error(`unknown scraper ${name}`);
         const report = await this.scrapers.runReport(name, { dryRun });
-        if (!dryRun) await this.reportScrape({ ...spec.notify, onNew: false }, report);
+        if (!dryRun) {
+          await this.reportScrape({ ...spec.notify, onNew: false }, report);
+          await this.afterScrape(name, report);
+        }
         return report;
       },
       scraperStatus: async (name) => {
@@ -706,6 +804,15 @@ Its spec is scrapers/${name}.yaml (read-only for you).
         skills: this.skills.list().length,
         'spend today': formatUsd(this.spend.today),
       }),
+      dashboards: async () => (await this.dashboards.list()).map((m) => this.dashboardInfo(m)),
+      dashboard: async (slug) => {
+        const m = await this.dashboards.get(slug);
+        return m ? this.dashboardWithHtml(m) : undefined;
+      },
+      exploreDataset: async (dataset) => {
+        const r = await this.dashboards.explore(dataset);
+        return { ...(await this.dashboardWithHtml(r.meta)), warnings: r.meta.warnings };
+      },
     };
   }
 

@@ -1,11 +1,11 @@
-import http from 'node:http';
+import { createWebServer } from './app/http';
 import { HarnessRuntime } from './app/runtime';
 import { loadConfig } from './config/load';
 import { DiscordBot } from './discord/client';
 
 /**
  * Long-running entry point: scheduler (scrapers, digest, learning, vault lint), the Discord
- * bot when a token is configured, and a tiny health endpoint for container platforms.
+ * bot when a token is configured, and the web port (health check and dashboards).
  */
 export async function main(): Promise<void> {
   const config = await loadConfig();
@@ -48,15 +48,20 @@ export async function main(): Promise<void> {
   }
 
   const port = Number(process.env.PORT ?? 8080);
-  const server = http.createServer((req, res) => {
-    if (req.url === '/healthz') {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, ...rt.ops().status() }));
-      return;
-    }
-    res.writeHead(404).end();
+  const web = config.dashboardEnv;
+  if (config.dashboards.serve && !web.password)
+    rt.logger.warn(
+      'dashboards are served without a password: set DASHBOARD_PASSWORD, or keep the port private (docs/dashboards.md)',
+    );
+  const server = createWebServer({
+    dashboards: config.dashboards.serve ? rt.dashboards : undefined,
+    status: () => rt.ops().status(),
+    auth: web.password ? { user: web.user, password: web.password } : undefined,
+    logger: rt.logger.child({ component: 'web' }),
   });
-  server.listen(port, () => rt.logger.info('health endpoint listening', { port }));
+  server.listen(port, () =>
+    rt.logger.info('web port listening', { port, dashboards: config.dashboards.serve, auth: !!web.password }),
+  );
 
   const shutdown = async (signal: string) => {
     rt.logger.info('shutting down', { signal });

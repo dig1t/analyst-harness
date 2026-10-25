@@ -52,6 +52,26 @@ export function coerceValue(v: unknown, type: ColumnType): unknown {
   }
 }
 
+/** A default format implied by a column's name: sizes in bytes and durations in seconds. */
+export function guessFormat(name: string, type: ColumnType): string | undefined {
+  if (!isNumericType(type)) return undefined;
+  if (/(^|_)(bytes|size_bytes|file_?size)$|bytes$/i.test(name)) return 'bytes';
+  if (/(^|_)(seconds|secs|sec|duration_s)$/i.test(name)) return 'duration';
+  return undefined;
+}
+
+/** A readable label from a column name: `released_at` and `releasedAt` become "Released at". */
+export function humanizeName(name: string): string {
+  const words = name
+    .replace(/^_+/, '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .split(/[\s_.-]+/)
+    .filter(Boolean)
+    .map((w) => (/^(id|url|uri|api|sku|iso|utc|usd|eur)$/i.test(w) ? w.toUpperCase() : w.toLowerCase()));
+  const text = words.join(' ');
+  return text ? text[0]!.toUpperCase() + text.slice(1) : name;
+}
+
 /** Columns in first-seen order with inferred types; `overrides` set labels, formats or types. */
 export function inferColumns(
   rows: Row[],
@@ -66,14 +86,16 @@ export function inferColumns(
         names.push(k);
       }
   for (const k of Object.keys(overrides)) if (!seen.has(k)) names.push(k);
+  const sample = rows.length > 1000 ? sampleEvenly(rows, 1000) : rows;
   return names.map((name) => {
     const o = overrides[name] ?? {};
-    const sample = rows.length > 1000 ? sampleEvenly(rows, 1000) : rows;
+    const type = o.type ?? inferType(sample.map((r) => r[name]));
+    const format = o.format ?? guessFormat(name, type);
     return {
       name,
-      type: o.type ?? inferType(sample.map((r) => r[name])),
+      type,
       ...(o.label ? { label: o.label } : {}),
-      ...(o.format ? { format: o.format } : {}),
+      ...(format ? { format } : {}),
       ...(o.description ? { description: o.description } : {}),
     };
   });

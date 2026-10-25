@@ -2,6 +2,7 @@ export const TASK_TYPES = [
   'scrape',
   'analysis',
   'report',
+  'dashboard',
   'research',
   'knowledge',
   'maintenance',
@@ -52,12 +53,20 @@ const RULES: Rule[] = [
     ],
   },
   {
+    type: 'dashboard',
+    patterns: [
+      [/\bdashboards?\b/i, 4],
+      [/\b(charts?|plots?|graphs?|visuali[sz]\w*)\b/i, 2],
+      [/\bexplor(e|er)\b.*\b(data|dataset)\b/i, 2],
+      [/\b(kpis?|heatmap|histogram|scatter)\b/i, 1],
+    ],
+  },
+  {
     type: 'report',
     patterns: [
       [/\breport\b/i, 3],
       [/\bsummar(y|ise|ize)\b/i, 2],
       [/\bdigest\b/i, 2],
-      [/\bchart|plot|dashboard|visuali[sz]/i, 2],
       [/\bwrite[- ]?up\b/i, 2],
     ],
   },

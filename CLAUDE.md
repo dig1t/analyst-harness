@@ -6,7 +6,8 @@ Guidance for coding agents working on this repository.
 
 ```bash
 npm ci
-npm run check          # eslint, tsc --noEmit, jest
+npm run check          # eslint, tsc (src, tests, ui, e2e), jest
+npm run test:e2e       # Playwright: the dashboard UI in Chromium
 npm run test:coverage  # coverage thresholds: 80% lines/functions/statements, 70% branches
 npm run format         # prettier --write .
 npm run vault:lint     # knowledge vault rules (must report 0 errors)
@@ -41,6 +42,9 @@ Run `npm run check` and `npm run format:check` before committing.
 - Learning loop: `src/learning/`; runtime wiring: `src/app/runtime.ts`.
 - Scrapers: `src/scrapers/` and `config/scrapers/*.yaml` (`docs/scrapers.md`).
 - Discord: `src/discord/` (router logic is tested; `client.ts` is a thin discord.js adapter).
+- Dashboards: `src/dashboards/` (spec, validation, loading, rendering, service) with pure cores in
+  `src/dashboards/core/` shared by the browser components in `ui/` (`docs/dashboards.md`).
+  Browser code must not import Node modules; `npm run test:e2e` runs the UI in Chromium.
 
 ## Knowledge vault
 

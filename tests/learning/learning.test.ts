@@ -31,6 +31,8 @@ describe('task classifier', () => {
     ['Scrape the job listings from this site every day', 'scrape'],
     ['What is the median order value by month in sales.csv?', 'analysis'],
     ['Write a weekly report on the HN dataset', 'report'],
+    ['Build a dashboard of PyPI releases by package', 'dashboard'],
+    ['Chart the ECB rates and let me explore the dataset', 'dashboard'],
     ['The arxiv scraper is broken, fix the selectors', 'maintenance'],
     ['Ingest this article into the wiki', 'knowledge'],
     ['hello there', 'general'],

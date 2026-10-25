@@ -11,7 +11,7 @@ import { markdownTable } from '../util/text';
 import { loadUiAssets } from './assets';
 import { describeProfile, isNumericType, isTimeType, profileColumn } from './core/infer';
 import { listDatasets, loadDataSource, type LoadedDataset } from './data-loader';
-import { explorerSpec } from './explorer';
+import { explorerSlug, explorerSpec } from './explorer';
 import { escapeHtml } from './markdown';
 import { dashboardNotebook } from './notebook';
 import { DashboardTooLargeError, DASHBOARD_CSP, renderDashboardHtml } from './render';
@@ -74,6 +74,11 @@ export class DashboardService {
 
   url(slug: string): string | undefined {
     return this.opts.publicUrl ? `${this.opts.publicUrl.replace(/\/+$/, '')}/dashboards/${slug}/` : undefined;
+  }
+
+  /** The catalog page written by writeIndex(). */
+  catalogPath(): string {
+    return path.join(this.opts.dir, 'index.html');
   }
 
   filePath(slug: string, file: string = 'index.html'): string | null {
@@ -277,11 +282,11 @@ export class DashboardService {
     const name = src.dataset ?? src.file ?? 'query';
     const lines = [describeProfile(name, d.columns, d.rows)];
     if (d.truncated) lines.push(`(profiled the first ${d.rows.length} of ${d.totalRows} rows)`);
-    const times = d.columns.filter((c) => isTimeType(c.type)).map((c) => c.name);
-    const measures = d.columns
-      .filter((c) => isNumericType(c.type) && !/(^|_)id$/i.test(c.name))
-      .map((c) => c.name);
-    const cats = d.columns
+    // Scraper bookkeeping (_key, _scraped_at, _change, _scraper) is never a measure or category.
+    const own = d.columns.filter((c) => !c.name.startsWith('_'));
+    const times = own.filter((c) => isTimeType(c.type)).map((c) => c.name);
+    const measures = own.filter((c) => isNumericType(c.type) && !/(^|_)id$/i.test(c.name)).map((c) => c.name);
+    const cats = own
       .filter((c) => c.type === 'string' || c.type === 'boolean')
       .filter((c) => {
         const p = profileColumn(c, d.rows, 1);
@@ -294,6 +299,8 @@ export class DashboardService {
     if (measures.length) lines.push(`- measures: ${measures.join(', ')} (KPIs, histograms, bar values)`);
     if (cats.length)
       lines.push(`- categories with few values: ${cats.join(', ')} (facets, select filters, bar x, series)`);
+    if (!times.length && d.columns.some((c) => c.name === '_scraped_at'))
+      lines.push('- no time column of its own; _scraped_at is when each row was scraped');
     if (!times.length && !measures.length)
       lines.push('- mostly text: a searchable table with facets fits best');
     const sample = d.rows.slice(0, 5);
@@ -317,9 +324,7 @@ export class DashboardService {
     const datasets = await listDatasets(this.opts.datasetsDir);
     const assets = await loadUiAssets();
     const fmt = (iso: string) => new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
-    const explorers = new Set(
-      metas.filter((m) => m.slug.startsWith('explore-')).map((m) => m.slug.slice('explore-'.length)),
-    );
+    const slugs = new Set(metas.map((m) => m.slug));
     const cards = metas
       .map(
         (m) => `<article class="hx-card hx-catalog-card">
@@ -336,7 +341,8 @@ export class DashboardService {
           .sort();
         const latest = files[files.length - 1]?.replace(/\.jsonl$/, '') ?? '';
         const desc = this.opts.describeDataset?.(name) ?? '';
-        return `<tr><td>${explorers.has(name) ? `<a href="explore-${escapeHtml(name)}/">${escapeHtml(name)}</a>` : escapeHtml(name)}</td><td>${escapeHtml(desc)}</td><td class="num">${files.length}</td><td>${escapeHtml(latest)}</td></tr>`;
+        const explorer = explorerSlug(name);
+        return `<tr><td>${slugs.has(explorer) ? `<a href="${escapeHtml(explorer)}/">${escapeHtml(name)}</a>` : escapeHtml(name)}</td><td>${escapeHtml(desc)}</td><td class="num">${files.length}</td><td>${escapeHtml(latest)}</td></tr>`;
       }),
     );
     const html = `<!doctype html>
@@ -365,7 +371,7 @@ ${metas.length ? `<div class="hx-catalog">${cards}</div>` : '<p class="hx-card-n
 </html>
 `;
     await ensureDir(this.opts.dir);
-    await writeTextAtomic(path.join(this.opts.dir, 'index.html'), html);
+    await writeTextAtomic(this.catalogPath(), html);
   }
 
   /** One paragraph for tool results and chat replies. */

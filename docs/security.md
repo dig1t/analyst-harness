@@ -68,6 +68,16 @@ access limited to the workspace and datasets (`allowed_directories`), `ATTACH` a
 rejected, writes (`COPY ... TO`) refused on read-only mounts and the configuration locked
 before the query runs.
 
+## Dashboards
+
+Dashboards are static files with a strict Content Security Policy (`default-src 'none'`,
+`connect-src 'none'`): they cannot load or send anything. Values are inserted as text, the
+embedded JSON escapes `<`, `>`, `&`, U+2028 and U+2029, and markdown notes are rendered on the
+server to a safe subset. The web server answers GET and HEAD for four whitelisted files per
+dashboard, sets `nosniff`, `no-referrer` and the CSP as headers, and checks basic auth
+(`DASHBOARD_PASSWORD`) in constant time. Publishing is a write, so read-only runs cannot do it.
+A dashboard embeds its data: share it like the data. See [dashboards.md](dashboards.md).
+
 ## Money
 
 A daily cap (`budgets.dailyUsd`) and a per-run cap (`budgets.runUsd` or the agent's

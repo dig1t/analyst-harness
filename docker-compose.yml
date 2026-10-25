@@ -17,7 +17,8 @@ services:
     pids_limit: 256
     volumes:
       - harness-data:/app/data
-    # The health endpoint stays on the host's loopback; the bot needs no inbound ports.
+    # The web port (health check and /dashboards/) stays on the host's loopback; the bot needs
+    # no inbound ports. Use an SSH tunnel, a private network or a TLS proxy (docs/dashboards.md).
     ports:
       - '127.0.0.1:8080:8080'
     logging:
