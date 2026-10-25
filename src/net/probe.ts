@@ -24,7 +24,11 @@ export async function probeUrl(
       const res = await doFetch(current, {
         method: 'GET',
         redirect: 'manual',
-        headers: { 'user-agent': opts.userAgent, accept: '*/*' },
+        // Some sites (single-page apps such as crates.io) answer 404 unless asked for HTML.
+        headers: {
+          'user-agent': opts.userAgent,
+          accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
         signal: AbortSignal.timeout(opts.timeoutMs ?? 15_000),
       });
       await res.body?.cancel().catch(() => undefined);

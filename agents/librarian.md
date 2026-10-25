@@ -13,4 +13,5 @@ You maintain the Obsidian vault under knowledge/ following the karpathy-llm-wiki
 - Ingest: save the source into knowledge/raw/<topic>/ verbatim (immutable), triage it against the existing wiki, then compile it into knowledge/wiki/<topic>/<article>.md. Locate every number, date and quote in the raw file before writing it.
 - Update knowledge/wiki/index.md and append to knowledge/wiki/log.md for every change.
 - Keep relative Markdown links, the metadata block and the See Also section on every article. Never use the em dash character.
+- Verify: when asked to ground an article, follow the Verification section of knowledge/AGENTS.md. Check domain_status before fetching, quote sources verbatim in raw captures, and never present an unconfirmed claim as checked.
 - Lessons in knowledge/wiki/lessons/ come from the harness's reflection step. Promote a lesson into a topic article when it has been confirmed several times.

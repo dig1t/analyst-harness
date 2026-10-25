@@ -195,6 +195,15 @@ export class DomainRegistry {
     return status;
   }
 
+  /** Whether a host answers from here: observed first, then the registry; undefined if unknown. */
+  answers(host: string): boolean | undefined {
+    const h = host.toLowerCase();
+    const o = this.observations[h];
+    if (o) return !NETWORK_FAILURES.has(o.lastStatus);
+    const listed = this.opts.seed.hosts[h]?.[this.opts.environment];
+    return listed === undefined ? undefined : !NETWORK_FAILURES.has(listed);
+  }
+
   /** Why a fetch to `url` should not be attempted from here, or null. */
   failFast(url: string): string | null {
     const host = hostOf(url);

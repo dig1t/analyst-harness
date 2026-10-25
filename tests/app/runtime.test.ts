@@ -336,6 +336,37 @@ describe('HarnessRuntime', () => {
     await expect(ops.exploreDataset('ghost')).rejects.toThrow('no dataset "ghost"');
   });
 
+  test('vault verification: the queue drives librarian runs on a schedule', async () => {
+    const seed = (title: string, url: string) =>
+      `# ${title}\n\n> Sources: ${url}\n> Raw: none yet (seed article)\n> Updated: 2026-10-24\n\n## Overview\n\nText.\n\n## See Also\n`;
+    const { rt, provider, notes } = await makeRuntime(() => ({ text: 'Verified 3 claims, corrected 1.' }), {
+      'config/harness.yaml': [
+        'logging: { level: silent }',
+        'learning: { enabled: false }',
+        'vault: { verify: { enabled: true, articlesPerRun: 1 } }',
+      ].join('\n'),
+      'agents/librarian.md':
+        '---\nname: librarian\ndescription: Keeps the vault\nknowledge: rw\n---\nKeep it true.',
+      'knowledge/wiki/http/cookies.md': seed(
+        'Cookies',
+        'RFC 6265 (https://datatracker.ietf.org/doc/html/rfc6265)',
+      ),
+      'knowledge/wiki/http/offline.md': seed('Offline', 'Gone (https://gone.example-data.org/x)'),
+    });
+    rt.domains.record('https://gone.example-data.org/x', { error: new Error('fetch failed') });
+    const report = await rt.vaultAccuracy('2026-10-25');
+    expect(report.totals).toMatchObject({ articles: 3, seed: 3, hostsUnreachable: 1 });
+    rt.registerSystemJobs();
+    expect(rt.scheduler.has('vault-verify')).toBe(true);
+    const job = await rt.scheduler.runNow('vault-verify');
+    expect(job.lastStatus).toBe('ok');
+    const task = provider.requests[0]!.messages[0]!.content;
+    expect(JSON.stringify(task)).toContain('Verify the vault article knowledge/wiki/http/cookies.md');
+    expect(provider.requests[0]!.system).toContain('Keep it true.');
+    expect(notes.at(-1)).toMatchObject({ channel: 'reports', title: 'Vault verification: 1 article' });
+    expect(notes.at(-1)!.body).toMatch(/^- wiki\/http\/cookies\.md: completed \(run run_/);
+  });
+
   test('runs can be stopped while in flight', async () => {
     let release: () => void = () => undefined;
     const gate = new Promise<void>((r) => (release = r));

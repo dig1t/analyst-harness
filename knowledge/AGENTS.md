@@ -85,6 +85,17 @@ references in `Sources`, but they have no captured raw source. They carry
 - Seed articles may contain small inaccuracies. Prefer a newer raw-grounded claim and mark
   the older text with a `Status: Outdated` or `Status: Disputed` block, as the skill says.
 
+## Verification
+
+To ground a seed article, fetch its cited sources and save what you used as captures named
+`raw/<topic>/<YYYY-MM-DD>-<source-slug>.md`: the URL and the fetch date first, then the
+passages quoted verbatim. Check every load-bearing claim against the captures, correct what does
+not hold, mark what you cannot confirm with a `Status: Unverified` note, link the captures on
+the `Raw` line (replacing the seed marker) and update `Updated`. `npm run cli -- vault queue`
+lists the articles that need this most; `npm run cli -- vault links` lists dead citations.
+Check that a source answers from your environment first (`domain_status`, or
+`npm run cli -- domains <host>`).
+
 ## Lessons (self-learning)
 
 `wiki/lessons/` is written by the harness reflection step after runs. Each lesson file:

@@ -16,6 +16,7 @@ import {
   type Notifier,
 } from '../discord/notifier';
 import type { DashboardInfo, HarnessOps } from '../discord/router';
+import { accuracyReport, formatAccuracy, verificationTask, type AccuracyReport } from '../knowledge/accuracy';
 import { KnowledgeVault } from '../knowledge/vault';
 import { AnthropicProvider } from '../llm/anthropic';
 import { PriceBook } from '../llm/pricing';
@@ -667,6 +668,27 @@ Its spec is scrapers/${name}.yaml (read-only for you).
         },
       });
     }
+    const verify = this.config.vault.verify;
+    if (verify.enabled && !this.scheduler.has('vault-verify')) {
+      this.scheduler.add({
+        name: 'vault-verify',
+        cron: verify.schedule,
+        description: 'Ground the top of the vault verification queue in fetched sources',
+        run: async () => {
+          const lines = await this.verifyVault(verify.articlesPerRun);
+          if (lines.length) {
+            const report = formatAccuracy(await this.vaultAccuracy(), 0);
+            await this.notify({
+              channel: 'reports',
+              title: `Vault verification: ${lines.length} article${lines.length === 1 ? '' : 's'}`,
+              body: `${lines.join('\n')}\n\n${report}`,
+              level: 'info',
+            });
+          }
+          return `${lines.length} articles`;
+        },
+      });
+    }
     if (!this.scheduler.has('vault-lint')) {
       this.scheduler.add({
         name: 'vault-lint',
@@ -689,6 +711,36 @@ Its spec is scrapers/${name}.yaml (read-only for you).
         },
       });
     }
+  }
+
+  // ----- vault accuracy -----
+
+  async vaultAccuracy(today = new Date().toISOString().slice(0, 10)): Promise<AccuracyReport> {
+    return accuracyReport(this.vault, {
+      environment: this.domains.environment,
+      answers: (host) => this.domains.answers(host),
+      today,
+      staleDays: this.config.vault.staleDays,
+    });
+  }
+
+  /**
+   * Ground the top of the verification queue: one librarian run per article whose cited
+   * hosts are not all known to be unreachable from here. Returns one line per article.
+   */
+  async verifyVault(limit: number, requestedBy = 'vault-verify'): Promise<string[]> {
+    const today = new Date().toISOString().slice(0, 10);
+    const report = await this.vaultAccuracy(today);
+    const picks = report.articles
+      .filter((a) => !a.grounded && a.citedHosts.length > a.unreachableHosts.length)
+      .slice(0, limit);
+    const agent = this.agents.has('librarian') ? 'librarian' : 'analyst';
+    const lines: string[] = [];
+    for (const a of picks) {
+      const r = await this.runTask({ task: verificationTask(a, today), agent, source: 'cron', requestedBy });
+      lines.push(`- ${a.path}: ${r.outcome} (run ${r.runId}, ${formatUsd(r.costUsd)})`);
+    }
+    return lines;
   }
 
   async digest(): Promise<string> {

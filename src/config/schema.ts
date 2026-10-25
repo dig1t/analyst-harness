@@ -124,7 +124,27 @@ export const HarnessConfigSchema = z
         digestSchedule: '3 8 * * *',
         digestEnabled: true,
       }),
-    vault: z.object({ lintSchedule: cron.default('41 4 * * 0') }).default({ lintSchedule: '41 4 * * 0' }),
+    vault: z
+      .object({
+        lintSchedule: cron.default('41 4 * * 0'),
+        /** Articles not updated for this many days count as stale in `vault status`. */
+        staleDays: z.number().int().min(1).default(365),
+        /** Opt-in: the librarian grounds the top of the verification queue in fetched sources. */
+        verify: z
+          .object({
+            enabled: z.boolean().default(false),
+            schedule: cron.default('23 5 * * 2,5'),
+            articlesPerRun: z.number().int().min(1).max(10).default(2),
+          })
+          .strict()
+          .default({ enabled: false, schedule: '23 5 * * 2,5', articlesPerRun: 2 }),
+      })
+      .strict()
+      .default({
+        lintSchedule: '41 4 * * 0',
+        staleDays: 365,
+        verify: { enabled: false, schedule: '23 5 * * 2,5', articlesPerRun: 2 },
+      }),
     domains: z
       .object({
         /** The checked-in registry of probed hosts (config/domains.yaml). */

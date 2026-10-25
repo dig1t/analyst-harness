@@ -7,7 +7,7 @@ aliases: [vault workflow, knowledge workflow, LLM wiki workflow, lessons]
 
 > Sources: analyst-harness source code: src/knowledge/vault.ts, src/knowledge/bm25.ts, src/learning/reflection.ts, agents/librarian.md (https://github.com/firebit-dev/analyst-harness); Andrej Karpathy, LLM Wiki gist (https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f); karpathy-llm-wiki skill by Astro-Han (https://github.com/Astro-Han/karpathy-llm-wiki)
 > Raw: none yet (seed article)
-> Updated: 2026-10-24
+> Updated: 2026-10-25
 
 ## Overview
 
@@ -48,6 +48,17 @@ After a run, the reflection step can turn what happened into a few concrete less
 | Orphans (no inbound links; lessons are exempt) | Warning |
 
 `npm run cli -- vault index` regenerates the index from each article's first sentence. The evidence checker shipped with the skill (`python3 skills/karpathy-llm-wiki/scripts/check_evidence.py knowledge`) lists seed articles as evidence errors by design.
+
+## Checking accuracy: status, queue, links and verification
+
+Seed articles are only as good as the knowledge they were written from, so the harness measures how grounded the vault is and works through it:
+
+- `npm run cli -- vault status` counts articles grounded in captured sources, seed articles and stale ones (not updated for `vault.staleDays`, 365 by default), and how many cited hosts answer from this environment according to the domain registry (`config/domains.yaml`, described in `docs/domains.md`).
+- `npm run cli -- vault queue` ranks articles for verification: ungrounded first, then stale, then the most linked (errors there spread furthest), with a bonus when a cited host answers from here and a penalty when none does or the article cites no URL at all.
+- `npm run cli -- vault links` checks every cited URL once and lists the dead ones (a 404 or 410 from a host that answers) with the articles citing them. Hosts that do not answer from here are reported as unchecked, not broken.
+- `npm run cli -- vault verify --limit 1`, or the opt-in `vault-verify` job (`vault.verify.enabled`), gives the librarian the top of the queue: fetch each cited source, save the passages used as a capture in `raw/<topic>/<date>-<source>.md`, check every number, date, name and quote against it, correct or flag what does not hold, link the capture on the Raw line and update the date. Each article is one agent run and counts against the budgets.
+
+Run verification where the sources answer: on a server with ordinary internet access, not in a sandbox that reaches only a few hosts.
 
 ## The vault in production
 

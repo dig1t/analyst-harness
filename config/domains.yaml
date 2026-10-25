@@ -43,7 +43,7 @@ hosts:
   corporate.cyrilamarchandblogs.com: { claude-code-cloud: unreachable }
   coveryourtracks.eff.org: { claude-code-cloud: unreachable }
   cppa.ca.gov: { claude-code-cloud: unreachable }
-  crates.io: { claude-code-cloud: http-404 }
+  crates.io: { claude-code-cloud: ok }
   crawlee.dev: { claude-code-cloud: unreachable }
   croner.56k.guru: { claude-code-cloud: unreachable }
   cssselect.readthedocs.io: { claude-code-cloud: unreachable }

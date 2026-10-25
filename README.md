@@ -198,7 +198,10 @@ holds immutable sources, `wiki/<topic>/` holds compiled articles, and `wiki/inde
 anti-bot measures, legal and ethical limits, data quality, storage, operations, tools, LLM-based
 extraction, a catalog of public sources and the harness itself. Open the folder in Obsidian, or
 let the `librarian` agent maintain it with the vendored `karpathy-llm-wiki` skill. The rules
-are in [knowledge/AGENTS.md](knowledge/AGENTS.md); `npm run vault:lint` checks them.
+are in [knowledge/AGENTS.md](knowledge/AGENTS.md); `npm run vault:lint` checks them. To raise
+accuracy, `npm run cli -- vault status` measures how grounded the vault is, `vault queue` ranks
+articles for verification, `vault links` finds dead citations, and `vault verify` (or the opt-in
+`vault-verify` job) has the librarian ground articles in captured sources.
 
 ## Development
 

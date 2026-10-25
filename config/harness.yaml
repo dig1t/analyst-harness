@@ -70,6 +70,11 @@ scrapers:
 
 vault:
   lintSchedule: '41 4 * * 0'
+  staleDays: 365 # `vault status` flags articles not updated for this long
+  verify:
+    enabled: false # true: the librarian grounds the top of the verification queue in fetched sources
+    schedule: '23 5 * * 2,5'
+    articlesPerRun: 2 # each article is one librarian run (counts against the budgets)
 
 domains:
   file: ./config/domains.yaml # probed hosts per environment; `harness domains check` refreshes it

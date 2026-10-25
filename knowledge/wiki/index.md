@@ -233,5 +233,5 @@ How this harness defines, schedules and learns from scrapers.
 | Article | Summary | Updated |
 |---------|---------|---------|
 | [Declarative Scraper Specs in This Harness](harness/harness-scraper-spec.md) | The YAML spec format the harness runs: sources, field rules, keys, validation, change detection, politeness and alerts, with testing advice and pitfalls. | 2026-10-24 |
-| [How the Agents Use and Grow This Vault](harness/harness-knowledge-workflow.md) | How agents search this vault, how the librarian grows it with the LLM Wiki workflow, how run lessons are written and retrieved, and how lint keeps it healthy. | 2026-10-24 |
+| [How the Agents Use and Grow This Vault](harness/harness-knowledge-workflow.md) | How agents search this vault, how the librarian grows it with the LLM Wiki workflow, how run lessons are written and retrieved, and how lint, the verification queue and the link checker keep it healthy and accurate. | 2026-10-25 |
 | [Runbook: From Request to Scheduled Scraper](harness/scraping-runbook.md) | The procedure from a request to a scheduled, monitored scraper: recon, strategy, ethics check, spec draft, dry run, review, apply and operate. | 2026-10-24 |

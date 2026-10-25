@@ -8,6 +8,7 @@ import { main } from './index';
 import { loadConfig } from './config/load';
 import type { AgentEvent } from './core/agent-loop';
 import { loadUiAssets } from './dashboards/assets';
+import { checkVaultLinks, formatAccuracy } from './knowledge/accuracy';
 import { DashboardService } from './dashboards/service';
 import { formatDomainSeed, isTrackableHost } from './net/domains';
 import { probeUrl } from './net/probe';
@@ -34,6 +35,8 @@ Usage: harness <command> [options]
   profiles                                                        Show what the profile bandit learned
   skills [list|proposed|approve <name>|reject <name>]             Manage skills
   vault lint [--strict] | vault index | vault search "<query>"    Knowledge vault tools
+  vault status | vault queue [--limit 30] | vault links | vault verify [--limit 1]
+                                                                  Vault accuracy: grounding, queue, dead links
   dashboard build <spec.yaml> | dashboard list | dashboard remove <slug>
                                                                   Build and manage dashboards
   explore <dataset>                                               Build the explorer dashboard for a dataset
@@ -240,7 +243,40 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
             io.out(`${h.score.toFixed(2)}  ${h.path}  ${h.title}\n      ${h.snippet}`);
           return 0;
         }
-        io.err('Usage: harness vault lint|index|search');
+        if (sub === 'status' || sub === 'queue') {
+          const report = await rt.vaultAccuracy();
+          io.out(formatAccuracy(report, sub === 'queue' ? Number(values.limit ?? 30) : 10));
+          return 0;
+        }
+        if (sub === 'links') {
+          const result = await checkVaultLinks(rt.vault, {
+            skip: (url) => rt.domains.failFast(url),
+            probe: async (url) =>
+              rt.domains.record(
+                url,
+                await probeUrl(url, {
+                  userAgent: config.scrapers.userAgent,
+                  allowPrivate: config.tools.allowPrivateNetwork,
+                }),
+              ),
+          });
+          for (const b of result.broken)
+            io.out(`${b.status.padEnd(9)} ${b.url}\n          cited in ${b.articles.join(', ')}`);
+          io.err(
+            `${result.ok} links answer, ${result.broken.length} broken, ${result.unchecked.length} could not be checked from ${rt.domains.environment}`,
+          );
+          return result.broken.length ? 1 : 0;
+        }
+        if (sub === 'verify') {
+          const lines = await rt.verifyVault(Number(values.limit ?? 1), 'cli');
+          io.out(
+            lines.length
+              ? lines.join('\n')
+              : 'Nothing to verify from here: no ungrounded article cites a host that answers.',
+          );
+          return 0;
+        }
+        io.err('Usage: harness vault lint|index|search|status|queue|links|verify');
         return 2;
       }
       case 'dashboard': {
