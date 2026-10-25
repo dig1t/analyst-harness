@@ -52,7 +52,11 @@ export async function loadConfig(
   if (env.HARNESS_ENVIRONMENT && /^[a-z0-9][a-z0-9-]{0,40}$/.test(env.HARNESS_ENVIRONMENT))
     cfg.domains.environment = env.HARNESS_ENVIRONMENT;
   if (env.HARNESS_MODEL) cfg.models.default = env.HARNESS_MODEL;
-  if (env.HARNESS_PROVIDER === 'anthropic' || env.HARNESS_PROVIDER === 'scripted')
+  if (
+    env.HARNESS_PROVIDER === 'claude-code' ||
+    env.HARNESS_PROVIDER === 'anthropic' ||
+    env.HARNESS_PROVIDER === 'scripted'
+  )
     cfg.provider = env.HARNESS_PROVIDER;
   const daily = num(env.HARNESS_DAILY_BUDGET_USD);
   if (daily !== undefined) cfg.budgets.dailyUsd = daily;

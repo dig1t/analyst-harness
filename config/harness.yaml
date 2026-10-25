@@ -6,7 +6,13 @@ paths:
   agents: ./agents
   scrapers: ./config/scrapers
 
-provider: anthropic # anthropic | scripted (offline demo, no API calls)
+# claude-code: your Claude plan, through the logged-in `claude` CLI (no API key, no per-token bill)
+# anthropic: the Claude API with ANTHROPIC_API_KEY (billed per token)
+# scripted: offline demo, no model calls
+provider: claude-code
+
+claudeCode:
+  command: claude # path to the Claude Code CLI if the daemon cannot find it on PATH
 
 models:
   default: claude-opus-5-5
@@ -20,6 +26,7 @@ anthropic:
   fallbacks: true # server-side refusal fallback ("default" routing)
 
 budgets:
+  # Caps on API spend. claude-code calls bill your Claude plan, so they count as 0 here.
   dailyUsd: 10 # hard daily cap across runs, judges and reflections (0 = no cap)
   runUsd: 2 # per-run cap unless an agent sets budget_usd
 

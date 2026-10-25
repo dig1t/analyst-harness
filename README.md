@@ -34,11 +34,13 @@ the background and starts it with every Claude Code session. [GETTING_STARTED.md
 walks through installing, configuring, using and removing it. The steps below are for working on
 the code.
 
-Requirements: Node 22 (`.nvmrc`), Python 3 for analysis scripts, and an Anthropic API key.
+Requirements: Node 22 (`.nvmrc`), Python 3 for analysis scripts, and [Claude Code](https://code.claude.com/docs)
+logged in to your Claude account. Model calls run through `claude -p` and use your Claude plan,
+not an API key ([Model provider](#model-provider)).
 
 ```bash
 npm ci
-cp .env.example .env              # set ANTHROPIC_API_KEY (read on every start)
+cp .env.example .env              # optional settings (read on every start)
 npm run cli -- doctor             # checks configuration and optional dependencies
 npm run cli -- run "Summarize the latest Hacker News scrape: top 5 stories by score"
 npm run cli -- scrape hn-top-stories --dry-run
@@ -80,6 +82,25 @@ for a verdict, updates the bandit, writes lessons into the vault and may draft a
 More detail: [docs/architecture.md](docs/architecture.md), [docs/paper-mapping.md](docs/paper-mapping.md),
 [docs/self-learning.md](docs/self-learning.md), [docs/domains.md](docs/domains.md).
 
+## Model provider
+
+`provider` in `config/harness.yaml` picks how the harness reaches Claude:
+
+- `claude-code` (the default) runs the Claude Code CLI you are logged in to, so runs, judges and
+  reflections count against your Claude plan's usage limits instead of an API bill. The harness
+  keeps its own loop, tools and permission checks; Claude Code runs with its tools, settings,
+  hooks, MCP servers and CLAUDE.md turned off and only answers each turn. The harness never
+  passes `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` to it. On a machine without a browser
+  login, set `CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token`. The dollar budgets do not apply,
+  because these calls cost nothing per token; the plan's own limits do. `harness doctor` checks
+  the login.
+- `anthropic` calls the Claude API with `ANTHROPIC_API_KEY`, billed per token and capped by
+  `budgets`. The Docker image uses it, because it has no Claude Code CLI.
+- `scripted` is an offline placeholder model for tests and demos.
+
+A Claude plan covers your own use: keep the Discord allow-list to yourself with `claude-code`
+(`doctor` warns when it is open to others).
+
 ## Configuration
 
 `config/harness.yaml` holds behavior; secrets only come from the environment
@@ -87,10 +108,10 @@ More detail: [docs/architecture.md](docs/architecture.md), [docs/paper-mapping.m
 
 | Variable                                                                      | Purpose                                                        |
 | ----------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `ANTHROPIC_API_KEY`                                                           | Claude API key                                                 |
+| `ANTHROPIC_API_KEY`                                                           | Claude API key for the `anthropic` provider                    |
 | `HARNESS_MODEL`                                                               | Default model (default `claude-opus-5-5`)                      |
-| `HARNESS_PROVIDER`                                                            | `anthropic` or `scripted`                                      |
-| `HARNESS_DAILY_BUDGET_USD`, `HARNESS_RUN_BUDGET_USD`                          | Spend caps                                                     |
+| `HARNESS_PROVIDER`                                                            | `claude-code` (default), `anthropic` or `scripted`             |
+| `HARNESS_DAILY_BUDGET_USD`, `HARNESS_RUN_BUDGET_USD`                          | API spend caps                                                 |
 | `HARNESS_DATA_DIR`                                                            | Runs, state, datasets and workspace                            |
 | `HARNESS_KNOWLEDGE_DIR`, `HARNESS_SCRAPERS_DIR`, `HARNESS_LEARNED_SKILLS_DIR` | Writable copies on a data volume (the container sets these)    |
 | `DISCORD_*`                                                                   | Bot token, application, guild, channels, allow-lists, webhooks |
@@ -136,7 +157,7 @@ out to Discord, so no inbound port is needed.
 ```bash
 # on the server
 git clone https://github.com/firebit-dev/analyst-harness && cd analyst-harness
-cp .env.example .env && $EDITOR .env
+cp .env.example .env && $EDITOR .env   # ANTHROPIC_API_KEY: the image calls the Claude API
 docker compose up -d
 docker compose logs -f
 ```
@@ -179,7 +200,7 @@ src/tools/         tool definitions, registry, executor, DuckDB engine
 src/safety/        workspace guard, file state, permissions, SSRF guard, env scrubbing
 src/sandbox/       command sandbox server and client (the optional sidecar container)
 src/net/           domain registry and reachability probes
-src/llm/           Anthropic provider, scripted provider, pricing, spend tracking
+src/llm/           Claude Code and Anthropic providers, scripted provider, pricing, spend tracking
 src/learning/      run store, taxonomy, judge, bandit, reflection, skill synthesis
 src/scrapers/      spec schema, polite HTTP client, robots.txt, extractors, runner, registry
 src/scheduler/     cron scheduler
@@ -226,8 +247,8 @@ npm run format         # Prettier
 npm run vault:lint     # vault rules
 ```
 
-Tests never call the real API or Discord: the scripted provider, fake fetch and fake cron
-factories stand in for them. See [CLAUDE.md](CLAUDE.md) for conventions when using a coding
+Tests never call the real API, Claude Code or Discord: the scripted provider, a fake CLI runner,
+fake fetch and fake cron factories stand in for them. See [CLAUDE.md](CLAUDE.md) for conventions when using a coding
 agent on this repository.
 
 ## Credits

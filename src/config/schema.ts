@@ -24,7 +24,14 @@ export const HarnessConfigSchema = z
         agents: './agents',
         scrapers: './config/scrapers',
       }),
-    provider: z.enum(['anthropic', 'scripted']).default('anthropic'),
+    provider: z.enum(['claude-code', 'anthropic', 'scripted']).default('claude-code'),
+    claudeCode: z
+      .object({
+        /** The Claude Code executable whose login (your Claude plan) the claude-code provider uses. */
+        command: z.string().min(1).default('claude'),
+      })
+      .strict()
+      .default({ command: 'claude' }),
     models: z
       .object({
         default: z.string().default('claude-opus-5-5'),

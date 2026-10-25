@@ -52,7 +52,7 @@ say "Building"
 if [ ! -f "$ROOT/.env" ]; then
   cp "$ROOT/.env.example" "$ROOT/.env"
   chmod 600 "$ROOT/.env"
-  say "Created $ROOT/.env: put your ANTHROPIC_API_KEY in it (and Discord settings if you want the bot)"
+  say "Created $ROOT/.env for optional settings, such as the Discord bot"
 fi
 
 say "Adding the harness command to $BIN_DIR"
@@ -80,7 +80,7 @@ say "Done"
 cat <<EOF
 analyst-harness is installed at $ROOT and running in the background.
 $( [ "$HOOK" = 1 ] && echo "Every new Claude Code session starts it (if it is not already running) and learns how to use it." )
-Next: put your ANTHROPIC_API_KEY in $ROOT/.env, then try
+Model calls use your Claude Code login (your Claude plan); run \`claude\` and /login if you have not. Then try
   harness run "Summarize the latest Hacker News stories"
   harness explore hn-top-stories        (after \`harness scrape hn-top-stories\`)
 Read GETTING_STARTED.md for everything else.

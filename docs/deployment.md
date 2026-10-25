@@ -6,6 +6,10 @@ Discord, the sites it scrapes) and no inbound ports.
 To run it on your own computer, started by Claude Code sessions, use the installer instead:
 [GETTING_STARTED.md](../GETTING_STARTED.md).
 
+The image has no Claude Code CLI, so it uses the `anthropic` provider (`HARNESS_PROVIDER=anthropic`
+in the Dockerfile): set `ANTHROPIC_API_KEY`, billed per token. The installer setup uses your
+Claude plan through Claude Code instead ([README](../README.md#model-provider)).
+
 ## Sizing and cost
 
 | Option                                           | Monthly cost (approx.)        | Good for                                      |

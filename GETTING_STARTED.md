@@ -46,18 +46,22 @@ The installer:
 Running it again is safe: it updates the install in place. `bash scripts/install.sh --no-hook`
 installs without the Claude Code hook.
 
-## 3. Add your keys
+## 3. Log in and add your settings
 
-Open `.env` in the harness folder and set at least:
+The harness reaches Claude through the Claude Code CLI you already use, so model calls count
+against your Claude plan's usage limits and need no API key. If `claude` is not logged in yet,
+run `claude` once and use `/login`. `harness doctor` shows the result on its `Claude Code login`
+line. Scheduled jobs and the learning loop use the plan too, so they share its limits with your
+own Claude Code sessions.
 
-```bash
-ANTHROPIC_API_KEY=sk-ant-...
-```
-
-Then run `harness daemon restart` so the running harness reads it.
+Keep `ANTHROPIC_API_KEY` out of the picture unless you want API billing: the harness never passes
+it to Claude Code, and it only uses it after you set `provider: anthropic` in
+`config/harness.yaml`. On a machine where you cannot log in with a browser, run
+`claude setup-token` elsewhere and put the token in `.env` as `CLAUDE_CODE_OAUTH_TOKEN`, then
+run `harness daemon restart` so the running harness reads it.
 
 The harness reads `.env` every time it starts. A variable that is already set in the
-environment wins over the file, so a key exported in your shell profile (or in Claude Code's
+environment wins over the file, so a value exported in your shell profile (or in Claude Code's
 environment) is the one used. Secrets belong in `.env` or the environment, never in
 `config/harness.yaml`.
 
@@ -111,9 +115,8 @@ In Claude Code, `/hooks` lists the hook. To skip it for one session, start Claud
 
 This repository registers the same hook in `.claude/settings.json`, so a cloud session opened
 on it installs, builds and starts the harness by itself (about 15 seconds on the first start).
-Add `ANTHROPIC_API_KEY` as an environment variable in the cloud environment's settings (the
-environment menu in the session's title bar, then Edit); new sessions pick it up. The hook on
-your own machine does not reach cloud sessions of other repositories.
+Model calls use the session's own Claude Code login, so it needs no key. The hook on your own
+machine does not reach cloud sessions of other repositories.
 
 ## 5. Use it
 
@@ -158,7 +161,8 @@ container on the same machine, for example), sessions use it and do not start a 
 | `harness: command not found`                           | Add `~/.local/bin` to your `PATH` (the installer prints the line), or call `~/analyst-harness/bin/harness`                |
 | You moved or renamed the folder                        | Run `bash scripts/install.sh` from the new place; it replaces the old hook                                                |
 | The hook does not run                                  | Check `node scripts/claude-hook.js status` and `/hooks`; the installer refuses to edit a `settings.json` that is not JSON |
-| Agent runs fail with an authentication error           | Set `ANTHROPIC_API_KEY` in `.env`, then `harness daemon restart`                                                          |
+| Agent runs fail with an authentication error           | Run `claude` and `/login` (or set `CLAUDE_CODE_OAUTH_TOKEN`), then check `harness doctor`                                 |
+| Agent runs stop with `Claude plan usage limit reached` | The plan's limit for this window is used up; runs work again after the reset time in the message                          |
 
 Logs are in `data/logs/harness.log` (rotated at 10 MB). Runs, datasets, dashboards and state are
 under `data/`.

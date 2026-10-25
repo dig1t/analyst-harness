@@ -1,4 +1,5 @@
 import type { Usage } from '../core/types';
+import type { CompletionResponse } from './provider';
 
 export interface ModelPrice {
   /** USD per million tokens. */
@@ -39,6 +40,11 @@ export class PriceBook {
       .sort((a, b) => b.length - a.length)
       .find((k) => model.includes(k));
     return key ? this.prices[key] : undefined;
+  }
+
+  /** Cost of one completion: what the provider billed when it says so, else list price. */
+  costOf(res: Pick<CompletionResponse, 'model' | 'usage' | 'costUsd'>): number {
+    return res.costUsd ?? this.cost(res.model, res.usage);
   }
 
   cost(model: string, usage: Usage): number {
