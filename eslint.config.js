@@ -20,7 +20,13 @@ module.exports = defineConfig([
     files: ['**/*.js'],
     languageOptions: {
       sourceType: 'commonjs',
-      globals: { module: 'writable', require: 'readonly', __dirname: 'readonly', process: 'readonly' },
+      globals: {
+        module: 'writable',
+        require: 'readonly',
+        __dirname: 'readonly',
+        process: 'readonly',
+        console: 'readonly',
+      },
     },
     rules: { '@typescript-eslint/no-require-imports': 'off' },
   },

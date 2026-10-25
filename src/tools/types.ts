@@ -66,6 +66,13 @@ export interface ScraperService {
 
 export interface SqlService {
   query(sql: string, maxRows: number, ctx: ToolContext): Promise<string>;
+  /** Structured results for programmatic use (dashboards); `total` counts rows before the cap. */
+  queryRows?(
+    sql: string,
+    maxRows: number,
+    ctx: Pick<ToolContext, 'runId' | 'workspace'>,
+  ): Promise<{ columns: string[]; rows: Array<Record<string, unknown>>; total: number }>;
+  release?(runId: string): void;
 }
 
 export interface ToolServices {

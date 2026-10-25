@@ -102,7 +102,7 @@ export class DuckDbSqlService implements SqlService {
     return con;
   }
 
-  private connection(ctx: ToolContext): Promise<DuckConnection> {
+  private connection(ctx: Pick<ToolContext, 'runId' | 'workspace'>): Promise<DuckConnection> {
     let con = this.connections.get(ctx.runId);
     if (!con) {
       con = this.connect(ctx.workspace);
@@ -117,17 +117,24 @@ export class DuckDbSqlService implements SqlService {
     void con?.then((c) => c.closeSync?.()).catch(() => undefined);
   }
 
-  async query(sql: string, maxRows: number, ctx: ToolContext): Promise<string> {
+  private async run(sql: string, ctx: Pick<ToolContext, 'runId' | 'workspace'>) {
     const { sql: rewritten, writes } = rewriteSqlPaths(sql, ctx.workspace);
     const con = await this.connection(ctx);
-    let reader;
     try {
-      reader = await con.runAndReadAll(rewritten);
+      const reader = await con.runAndReadAll(rewritten);
+      return { columns: reader.columnNames(), rows: reader.getRowObjectsJson(), writes };
     } catch (err) {
       throw new ToolError(`DuckDB error: ${errorMessage(err).split('\n').slice(0, 6).join('\n')}`);
     }
-    const columns = reader.columnNames();
-    const rows = reader.getRowObjectsJson();
+  }
+
+  async queryRows(sql: string, maxRows: number, ctx: Pick<ToolContext, 'runId' | 'workspace'>) {
+    const { columns, rows } = await this.run(sql, ctx);
+    return { columns, rows: rows.slice(0, maxRows), total: rows.length };
+  }
+
+  async query(sql: string, maxRows: number, ctx: ToolContext): Promise<string> {
+    const { columns, rows, writes } = await this.run(sql, ctx);
     const shown = rows.slice(0, maxRows);
     const fmt = (v: unknown) =>
       v === null || v === undefined ? 'NULL' : typeof v === 'object' ? JSON.stringify(v) : String(v);
