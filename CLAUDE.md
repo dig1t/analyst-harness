@@ -12,6 +12,7 @@ npm run test:coverage  # coverage thresholds: 80% lines/functions/statements, 70
 npm run format         # prettier --write .
 npm run vault:lint     # knowledge vault rules (must report 0 errors)
 npm run cli -- doctor  # configuration check
+npm run cli -- daemon status  # the background harness the session hook keeps running
 ```
 
 Run `npm run check` and `npm run format:check` before committing.
@@ -31,7 +32,8 @@ Run `npm run check` and `npm run format:check` before committing.
 - Never write the em dash character (U+2014) in authored files; a test enforces it. Vendored
   skills under `skills/vendor-karpathy` and `skills/karpathy-llm-wiki` are exempt and must stay
   unmodified (see their `VENDORED.md`).
-- Secrets only come from the environment. Never add them to `config/harness.yaml`.
+- Secrets only come from the environment (`.env` is loaded into it on start and never overrides
+  it). Never add them to `config/harness.yaml`.
 
 ## Where things live
 
@@ -42,6 +44,13 @@ Run `npm run check` and `npm run format:check` before committing.
   command sandbox (`src/sandbox/`) runs bash in a sidecar container; keep the permission checks in
   the harness, never in the sandbox.
 - Learning loop: `src/learning/`; runtime wiring: `src/app/runtime.ts`.
+- Always-on install ([GETTING_STARTED.md](GETTING_STARTED.md)): `scripts/install.sh`,
+  `scripts/claude-hook.js` (registers the user-level SessionStart hook),
+  `scripts/claude-session-start.js` (the hook; `.claude/settings.json` also runs it for this
+  repository) and `src/app/daemon.ts` (`harness daemon`). The hook must never fail a session:
+  it reports problems as session context and exits 0. It rebuilds when `src/` or `ui/` changed,
+  and `harness daemon start` restarts a daemon still running an older build. `HARNESS_AUTOSTART=0`
+  skips the hook.
 - Scrapers: `src/scrapers/` and `config/scrapers/*.yaml` (`docs/scrapers.md`).
 - Discord: `src/discord/` (router logic is tested; `client.ts` is a thin discord.js adapter).
 - Domain registry: `src/net/` and `config/domains.yaml` (`docs/domains.md`). Before relying on a

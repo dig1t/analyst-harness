@@ -1,0 +1,10 @@
+#!/bin/sh
+# The analyst-harness CLI for this checkout, usable from any directory. The session hook puts
+# this folder on PATH; scripts/install.sh links ~/.local/bin/harness here.
+ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
+if [ ! -f "$ROOT/dist/cli.js" ]; then
+  echo "analyst-harness is not built yet: run 'npm run build' in $ROOT" >&2
+  exit 1
+fi
+export HARNESS_ROOT="${HARNESS_ROOT:-$ROOT}"
+exec node "$ROOT/dist/cli.js" "$@"

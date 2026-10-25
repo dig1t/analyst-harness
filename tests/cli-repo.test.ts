@@ -117,10 +117,19 @@ describe('CLI', () => {
       expect(await runCli(['vault', 'nope'], io)).toBe(2);
       expect(await runCli(['skills', 'approve'], io)).toBe(2);
       expect(await runCli(['bogus'], io)).toBe(2);
+      // Nothing listens on this port, so the daemon reports itself stopped.
+      process.env.PORT = '1';
+      expect(await runCli(['daemon', 'status'], io)).toBe(3);
+      expect(s.out.at(-1)).toMatch(/^not running; start it with `harness daemon start`/);
+      expect(await runCli(['daemon', 'stop'], io)).toBe(0);
+      expect(await runCli(['daemon', 'logs'], io)).toBe(0);
+      expect(s.out.at(-1)).toBe('(no log yet)');
+      expect(await runCli(['daemon'], io)).toBe(2);
     } finally {
       process.chdir(cwd);
       delete process.env.HARNESS_DATA_DIR;
       delete process.env.LOG_LEVEL;
+      delete process.env.PORT;
     }
   });
 });
@@ -137,7 +146,7 @@ async function authoredFiles(): Promise<string[]> {
   );
   return files.filter(
     (f) =>
-      /\.(ts|js|md|ya?ml|json|txt|example)$|Dockerfile$|\.dockerignore$/.test(f) ||
+      /\.(ts|js|md|ya?ml|json|txt|example|sh)$|Dockerfile$|\.dockerignore$|^bin\//.test(f) ||
       f.endsWith('.env.example'),
   );
 }

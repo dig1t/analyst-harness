@@ -29,11 +29,16 @@ reflection and skill synthesis feed lessons and new skills back into the system.
 
 ## Quick start
 
+To use it day to day, install it with `bash scripts/install.sh`: it keeps the harness running in
+the background and starts it with every Claude Code session. [GETTING_STARTED.md](GETTING_STARTED.md)
+walks through installing, configuring, using and removing it. The steps below are for working on
+the code.
+
 Requirements: Node 22 (`.nvmrc`), Python 3 for analysis scripts, and an Anthropic API key.
 
 ```bash
 npm ci
-cp .env.example .env              # set ANTHROPIC_API_KEY
+cp .env.example .env              # set ANTHROPIC_API_KEY (read on every start)
 npm run cli -- doctor             # checks configuration and optional dependencies
 npm run cli -- run "Summarize the latest Hacker News scrape: top 5 stories by score"
 npm run cli -- scrape hn-top-stories --dry-run
@@ -156,13 +161,16 @@ Dependabot keeps npm packages, actions and the base image current.
 ## Repository layout
 
 ```
+.claude/           SessionStart hook that starts the harness in Claude Code sessions on this repo
 agents/            agent definitions (Markdown + frontmatter)
+bin/harness        the `harness` command
 config/            harness.yaml and scraper specs
 docker/            container entrypoint
 docs/              architecture, paper mapping, learning, deployment, Discord, security, scrapers
 knowledge/         Obsidian vault: raw/ sources, wiki/ articles, index and log (LLM Wiki layout)
+scripts/           installer, Claude Code hook scripts, UI bundler
 skills/            vendored and harness skills; learned/ and proposed/ appear at runtime
-src/app/           runtime wiring and the web port (health check, dashboards)
+src/app/           runtime wiring, the web port (health check, dashboards) and the daemon manager
 src/dashboards/    dashboard spec, validation, data loading, rendering, service; core/ is shared with ui/
 ui/                dashboard browser components (bundled into every dashboard)
 e2e/               Playwright tests for the dashboard UI

@@ -3,6 +3,9 @@
 The harness is one container with one volume. It needs outbound HTTPS (the Claude API,
 Discord, the sites it scrapes) and no inbound ports.
 
+To run it on your own computer, started by Claude Code sessions, use the installer instead:
+[GETTING_STARTED.md](../GETTING_STARTED.md).
+
 ## Sizing and cost
 
 | Option                                           | Monthly cost (approx.)        | Good for                                      |

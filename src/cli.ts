@@ -3,9 +3,12 @@ import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { parseArgs } from 'node:util';
+import { daemonStatus, sessionContext, startDaemon, stopDaemon, tailLog } from './app/daemon';
 import { HarnessRuntime } from './app/runtime';
 import { main } from './index';
+import { loadDotEnv } from './config/dotenv';
 import { loadConfig } from './config/load';
+import type { HarnessConfig } from './config/schema';
 import type { AgentEvent } from './core/agent-loop';
 import { loadUiAssets } from './dashboards/assets';
 import { checkVaultLinks, formatAccuracy } from './knowledge/accuracy';
@@ -20,6 +23,7 @@ import { DuckDbSqlService } from './tools/sql-engine';
 import { formatScrapeReport } from './scrapers/runner';
 import { mapConcurrent } from './util/concurrency';
 import { writeTextAtomic } from './util/fs';
+import { errorMessage } from './util/errors';
 import { formatUsd } from './util/text';
 
 export const USAGE = `analyst-harness CLI
@@ -44,6 +48,7 @@ Usage: harness <command> [options]
   domains [host...] | domains check <host...> [--vault] [--scrapers] [--save]
                                                                   Which hosts answer from this environment
   discord commands                                                Print the slash command JSON
+  daemon start|stop|restart|status|logs|ensure [--hook]           Keep the harness running in the background
   doctor                                                          Check configuration and dependencies
 `;
 
@@ -101,6 +106,70 @@ export function terminalApprovals(yes: boolean): ApprovalGateway | undefined {
   };
 }
 
+/** `harness daemon ...`: runs without the full runtime, so it is quick enough for a session hook. */
+async function daemonCommand(
+  sub: string | undefined,
+  values: { hook?: boolean; lines?: string },
+  config: HarnessConfig,
+  io: CliIO,
+): Promise<number> {
+  const opts = {
+    root: config.root,
+    dataDir: config.resolved.data,
+    port: Number(process.env.PORT ?? 8080),
+    host: process.env.HOST || '127.0.0.1',
+  };
+  const where = { root: config.root, dataDir: config.resolved.data };
+  switch (sub) {
+    case 'ensure':
+    case 'start':
+    case 'restart': {
+      try {
+        // Restart after editing .env or rebuilding; it stops only a harness this manager started.
+        if (sub === 'restart') await stopDaemon(opts);
+        const status = await startDaemon(opts);
+        io.out(
+          values.hook
+            ? sessionContext(status, where)
+            : `analyst-harness is running at ${status.url} (pid ${status.pid ?? 'unknown'}); logs: ${status.logFile}`,
+        );
+        return 0;
+      } catch (err) {
+        const message = errorMessage(err);
+        if (values.hook) {
+          // A session hook must never fail the session: report the problem as context instead.
+          io.out(sessionContext(await daemonStatus(opts), where, message));
+          return 0;
+        }
+        io.err(`could not start the harness: ${message}`);
+        return 1;
+      }
+    }
+    case 'stop':
+      io.out(
+        (await stopDaemon(opts))
+          ? 'stopped analyst-harness'
+          : 'analyst-harness was not running (or was not started by `harness daemon`)',
+      );
+      return 0;
+    case 'status': {
+      const s = await daemonStatus(opts);
+      io.out(
+        s.running
+          ? `running at ${s.url}${s.pid ? ` (pid ${s.pid}, since ${s.startedAt})` : ' (started outside `harness daemon`)'}; logs: ${s.logFile}`
+          : `not running; start it with \`harness daemon start\`; logs: ${s.logFile}`,
+      );
+      return s.running ? 0 : 3;
+    }
+    case 'logs':
+      io.out((await tailLog(config.resolved.data, Number(values.lines ?? 60))) || '(no log yet)');
+      return 0;
+    default:
+      io.err('Usage: harness daemon start|stop|restart|status|logs|ensure [--hook]');
+      return 2;
+  }
+}
+
 export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<number> {
   const [command, ...rest] = argv;
   if (!command || command === 'help' || command === '--help' || command === '-h') {
@@ -124,15 +193,19 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
       limit: { type: 'string' },
       strict: { type: 'boolean' },
       vault: { type: 'boolean' },
+      hook: { type: 'boolean' },
+      lines: { type: 'string' },
       scrapers: { type: 'boolean' },
       save: { type: 'boolean' },
     },
   });
+  loadDotEnv(process.env.HARNESS_ROOT ?? process.cwd());
   const config = await loadConfig();
   if (command === 'serve') {
     await main();
     return 0;
   }
+  if (command === 'daemon') return daemonCommand(positionals[0], values, config, io);
   const rt = await HarnessRuntime.create({ config, env: process.env });
   try {
     switch (command) {
