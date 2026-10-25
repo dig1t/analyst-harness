@@ -39,19 +39,56 @@ passwords) are removed unless listed in `tools.bashPassEnv`. Each command has a 
 its whole process group is killed on timeout or abort.
 
 **Residual risk: interpreters.** The default config allows `python3`, `duckdb` and `sqlite3`
-without asking, because analysis needs them. An interpreter runs with the harness user's
-rights: it can open the network and read files the workspace guard does not cover, including
-the harness process's environment through `/proc`. A prompt injection in fetched content could
-use that. The defaults limit the exposure: unattended runs (scraper repairs), which read
-untrusted pages with nobody watching, do not get `bashAllowExtra` unless you set
-`permissions.cronAllowExtra: true`. To harden further:
+without asking, because analysis needs them. In the single-container deployment an interpreter
+runs with the harness user's rights: it can open the network and read files the workspace guard
+does not cover, including the harness process's environment (the API key and the bot token)
+through `/proc`. A prompt injection in fetched content could use that. Unattended runs (scraper
+repairs), which read untrusted pages with nobody watching, do not get `bashAllowExtra` unless you
+set `permissions.cronAllowExtra: true`.
+
+### The command sandbox
+
+The hardened deployment moves every shell command into a second container:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.sandbox.yml up -d
+```
+
+The `sandbox` container runs `dist/sandbox/main.js`, a small server on a Unix socket shared
+with the harness. It has no network (`network_mode: none`), no secrets and no harness
+environment, a separate PID namespace (so `/proc` shows nothing of the harness), a read-only
+root filesystem, dropped capabilities and its own memory, CPU and process limits. It mounts only
+the workspace (read-write) and the datasets and dashboards (read-only); runs, state, the vault
+and the skills stay out of reach. The harness keeps every decision: the permission layer still
+classifies each command and asks for approval before anything is sent, and only the variables
+listed in `tools.bashPassEnv` travel with a command. Timeouts and aborts kill the command's
+whole process group in the sandbox.
+
+`HARNESS_SANDBOX_SOCKET` (or `tools.sandboxSocket`) switches the bash tool to the sandbox. If
+the sandbox is down, commands fail with a clear error instead of falling back to local
+execution. Analysis scripts that need packages get them from the image, not from `pip install`
+at run time. Volume subpaths need Docker Engine 26 or newer; without them, keep the
+single-container deployment and the other measures below.
+
+## Untrusted content
+
+Fetched pages, API responses and scraped records can carry instructions aimed at the model. The
+base prompt tells agents to treat outside content as data and to report, not follow,
+instructions found in it, and every `web_fetch` result is labeled as untrusted external content.
+Labels lower the odds; the sandbox and the permission layer limit the damage when they fail.
+
+## Further hardening
 
 - Remove the interpreters from `bashAllowExtra` so every script needs an approval.
-- Use an API key with a spend limit and a bot token that can only reach your server.
-- Restrict the container's outbound traffic to the hosts it needs, with a host firewall or
-  an egress proxy.
-- Running tool commands in a separate sandbox container without secrets is the natural next
-  step and is not implemented yet.
+- Use an Anthropic API key with a spend limit, used only by this deployment, and a Discord bot
+  invited with the smallest set of permissions.
+- Restrict the harness container's outbound traffic to the hosts it needs, with an egress
+  proxy or host firewall rules (the domain registry, `config/domains.yaml`, lists them).
+- Run the sandbox under a stronger container runtime such as gVisor (`runtime: runsc`).
+- Reach dashboards through an SSH tunnel or a private network rather than a public port.
+- Rotate the API key and the bot token on a schedule, and whenever a run did something you
+  cannot explain.
+- Pin the image by digest in production and verify it before deploying.
 
 ## Network
 
@@ -92,8 +129,9 @@ validated against the schema first.
 ## Container
 
 Non-root user, read-only root filesystem, all capabilities dropped, `no-new-privileges`,
-memory and process limits, the health endpoint bound to loopback, and secrets only in `.env`
-(never in `config/harness.yaml` or the image).
+memory and process limits, the web port bound to loopback, and secrets only in `.env` (never in
+`config/harness.yaml` or the image). The optional sandbox container adds no network and no
+secrets for shell commands (see above).
 
 ## Reporting a problem
 

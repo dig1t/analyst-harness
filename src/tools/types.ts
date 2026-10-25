@@ -133,6 +133,8 @@ export interface ToolRuntimeConfig {
   userAgent: string;
   allowPrivateNetwork: boolean;
   postEditDiagnostics: boolean;
+  /** Run bash commands in the sandbox container listening on this Unix socket. */
+  sandboxSocket?: string;
 }
 
 export const DEFAULT_TOOL_RUNTIME: ToolRuntimeConfig = {

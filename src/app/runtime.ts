@@ -326,6 +326,7 @@ export class HarnessRuntime {
       allowPrivateNetwork: this.config.tools.allowPrivateNetwork,
       postEditDiagnostics: this.config.tools.postEditDiagnostics,
       userAgent: this.config.scrapers.userAgent,
+      sandboxSocket: this.config.tools.sandboxSocket,
     };
   }
 
@@ -426,7 +427,10 @@ export class HarnessRuntime {
         (m) =>
           `- ${m.alias}/ (${m.mode === 'ro' ? 'read-only' : 'read-write'}): ${about[m.alias] ?? m.alias}`,
       );
-    return `# Environment\n\nToday is ${new Date().toISOString().slice(0, 10)} (UTC). Your working directory is the workspace root (read-write). Other folders are mounted under these prefixes:\n${mounts.join('\n')}`;
+    const sandbox = this.config.tools.sandboxSocket
+      ? '\n\nShell commands (bash) run in a separate sandbox container with no network access, no secrets, the workspace read-write and datasets/ and dashboards/ read-only. Fetch data with web_fetch or the scrapers, then process it in the shell.'
+      : '';
+    return `# Environment\n\nToday is ${new Date().toISOString().slice(0, 10)} (UTC). Your working directory is the workspace root (read-write). Other folders are mounted under these prefixes:\n${mounts.join('\n')}${sandbox}`;
   }
 
   async runTask(req: RunTaskRequest): Promise<RunResult> {

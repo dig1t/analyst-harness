@@ -12,6 +12,7 @@ import { checkVaultLinks, formatAccuracy } from './knowledge/accuracy';
 import { DashboardService } from './dashboards/service';
 import { formatDomainSeed, isTrackableHost } from './net/domains';
 import { probeUrl } from './net/probe';
+import { sandboxExec } from './sandbox/client';
 import { toDiscordJson } from './discord/commands';
 import { DiscordApprovalGateway } from './discord/approvals';
 import type { ApprovalGateway } from './safety/permissions';
@@ -407,6 +408,21 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
             `${rt.skills.list().length} skills${rt.skills.issues.length ? `, ${rt.skills.issues.length} skipped` : ''}`,
           ],
           ['scrapers loaded', true, `${rt.scrapers.all().length} specs`],
+          [
+            'command sandbox',
+            !config.tools.sandboxSocket ||
+              (await sandboxExec(config.tools.sandboxSocket, {
+                v: 1,
+                command: 'true',
+                timeoutMs: 5_000,
+              }).then(
+                () => true,
+                () => false,
+              )),
+            config.tools.sandboxSocket
+              ? `bash runs in the sandbox at ${config.tools.sandboxSocket}`
+              : 'off: bash runs in this container (docs/security.md)',
+          ],
           [
             'dashboard UI assets',
             await loadUiAssets().then(

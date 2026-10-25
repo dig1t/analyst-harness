@@ -107,6 +107,8 @@ export const HarnessConfigSchema = z
         bashPassEnv: z.array(z.string()).default([]),
         allowPrivateNetwork: z.boolean().default(false),
         postEditDiagnostics: z.boolean().default(true),
+        /** Unix socket of the sandbox container; bash commands run there (docs/security.md). */
+        sandboxSocket: z.string().optional(),
       })
       .default({ bashPassEnv: [], allowPrivateNetwork: false, postEditDiagnostics: true }),
     scrapers: z

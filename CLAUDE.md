@@ -38,7 +38,9 @@ Run `npm run check` and `npm run format:check` before committing.
 - Agent loop and paper components: `src/core/` (see `docs/paper-mapping.md`).
 - Tools: `src/tools/`; register new ones in the `ToolRegistry` built in `src/app/runtime.ts`
   and give each a `usageRule`, a precise `readOnly` flag and a `category`.
-- Safety layer: `src/safety/`. Changes here need tests for the bypass you are preventing.
+- Safety layer: `src/safety/`. Changes here need tests for the bypass you are preventing. The
+  command sandbox (`src/sandbox/`) runs bash in a sidecar container; keep the permission checks in
+  the harness, never in the sandbox.
 - Learning loop: `src/learning/`; runtime wiring: `src/app/runtime.ts`.
 - Scrapers: `src/scrapers/` and `config/scrapers/*.yaml` (`docs/scrapers.md`).
 - Discord: `src/discord/` (router logic is tested; `client.ts` is a thin discord.js adapter).

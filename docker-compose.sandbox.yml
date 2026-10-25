@@ -1,0 +1,75 @@
+# Hardened mode: the agents' shell commands run in a second container with no network, no
+# secrets and only the workspace (read-write) plus datasets and dashboards (read-only).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.sandbox.yml up -d
+#
+# Needs Docker Engine 26 or newer (volume subpaths). See docs/security.md.
+services:
+  harness:
+    environment:
+      HARNESS_SANDBOX_SOCKET: /sandbox/exec.sock
+    volumes:
+      - sandbox-socket:/sandbox
+
+  sandbox:
+    image: ghcr.io/firebit-dev/analyst-harness:latest
+    build: .
+    container_name: analyst-harness-sandbox
+    restart: unless-stopped
+    # Skip the harness entrypoint: this container seeds nothing and sees no harness data.
+    entrypoint: ['/usr/bin/tini', '--']
+    command: ['node', 'dist/sandbox/main.js']
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    cpus: 1.0
+    pids_limit: 256
+    environment:
+      SANDBOX_SOCKET: /sandbox/exec.sock
+      SANDBOX_MOUNTS: '=/workspace,datasets=/workspace/datasets,dashboards=/workspace/dashboards'
+    volumes:
+      - sandbox-socket:/sandbox
+      - type: volume
+        source: harness-data
+        target: /workspace
+        volume:
+          subpath: workspace
+      - type: volume
+        source: harness-data
+        target: /workspace/datasets
+        read_only: true
+        volume:
+          subpath: datasets
+      - type: volume
+        source: harness-data
+        target: /workspace/dashboards
+        read_only: true
+        volume:
+          subpath: dashboards
+    # The harness creates the workspace, datasets and dashboards folders on its first start.
+    depends_on:
+      harness:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('net').connect('/sandbox/exec.sock').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+
+volumes:
+  sandbox-socket:

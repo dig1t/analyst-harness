@@ -82,3 +82,8 @@ jobs:
             -e HARNESS_PROVIDER=scripted analyst-harness:ci node dist/cli.js doctor || true
           docker run --rm --read-only --tmpfs /tmp -v harness-ci:/app/data \
             analyst-harness:ci node dist/cli.js scrapers
+      - name: Smoke test the command sandbox (no network)
+        run: |
+          docker run --rm --read-only --tmpfs /tmp --network none \
+            -v "$PWD/docker/sandbox-smoke.js:/smoke.js:ro" \
+            --entrypoint node analyst-harness:ci /smoke.js

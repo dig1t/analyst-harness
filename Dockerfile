@@ -40,8 +40,8 @@ COPY config ./config
 COPY knowledge ./knowledge-seed
 COPY docker/entrypoint.sh /usr/local/bin/harness-entrypoint
 RUN chmod 0755 /usr/local/bin/harness-entrypoint \
-  && mkdir -p /app/data \
-  && chown node:node /app/data
+  && mkdir -p /app/data /sandbox \
+  && chown node:node /app/data /sandbox
 USER node
 VOLUME ["/app/data"]
 EXPOSE 8080

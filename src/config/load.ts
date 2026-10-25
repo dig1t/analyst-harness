@@ -48,6 +48,7 @@ export async function loadConfig(
   if (env.HARNESS_AGENTS_DIR) cfg.paths.agents = env.HARNESS_AGENTS_DIR;
   if (env.HARNESS_DASHBOARDS_DIR) cfg.dashboards.dir = env.HARNESS_DASHBOARDS_DIR;
   if (env.HARNESS_DOMAINS_FILE) cfg.domains.file = env.HARNESS_DOMAINS_FILE;
+  if (env.HARNESS_SANDBOX_SOCKET) cfg.tools.sandboxSocket = env.HARNESS_SANDBOX_SOCKET;
   if (env.HARNESS_ENVIRONMENT && /^[a-z0-9][a-z0-9-]{0,40}$/.test(env.HARNESS_ENVIRONMENT))
     cfg.domains.environment = env.HARNESS_ENVIRONMENT;
   if (env.HARNESS_MODEL) cfg.models.default = env.HARNESS_MODEL;

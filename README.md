@@ -169,6 +169,8 @@ e2e/               Playwright tests for the dashboard UI
 src/core/          agent loop, prompts, planning, context manager, profiles, stuck detection
 src/tools/         tool definitions, registry, executor, DuckDB engine
 src/safety/        workspace guard, file state, permissions, SSRF guard, env scrubbing
+src/sandbox/       command sandbox server and client (the optional sidecar container)
+src/net/           domain registry and reachability probes
 src/llm/           Anthropic provider, scripted provider, pricing, spend tracking
 src/learning/      run store, taxonomy, judge, bandit, reflection, skill synthesis
 src/scrapers/      spec schema, polite HTTP client, robots.txt, extractors, runner, registry
@@ -186,9 +188,12 @@ for shell commands (unattended runs turn "ask" into "deny"), approvals through D
 a workspace guard that blocks path escapes including symlinks, read-before-write checks,
 read-only mounts for datasets, the vault and skills, an SSRF guard on every fetch and redirect,
 secrets scrubbed from the shell environment, a sandboxed DuckDB connection and daily spend
-caps. Learned skills never activate without a human approval. The main residual risk is the
-allow-listed interpreters (`python3`, `duckdb`, `sqlite3`), which run with the harness user's
-rights; [docs/security.md](docs/security.md) explains the defaults and how to harden them.
+caps. Learned skills never activate without a human approval. Fetched content is labeled as
+untrusted, and the base prompt tells agents never to follow instructions found in it. The main
+residual risk is the allow-listed interpreters (`python3`, `duckdb`, `sqlite3`); the hardened
+deployment (`docker-compose.sandbox.yml`) runs every shell command in a sidecar container with no
+network and no secrets. [docs/security.md](docs/security.md) explains the defaults and how to
+harden further.
 
 ## The knowledge vault
 

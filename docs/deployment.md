@@ -53,6 +53,9 @@ To build on the server instead of pulling, clone the repository and run
   `DASHBOARD_PASSWORD` set ([dashboards.md](dashboards.md)). Dashboards live on the volume
   under `/app/data/dashboards`.
 - Logs JSON lines to stdout; compose rotates them (3 files of 10 MB).
+- Optionally runs shell commands in a sandbox container with no network and no secrets:
+  `docker compose -f docker-compose.yml -f docker-compose.sandbox.yml up -d` (Docker Engine 26 or
+  newer; see [security.md](security.md)).
 
 ## Operating it
 

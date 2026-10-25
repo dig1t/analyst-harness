@@ -1,67 +1,13 @@
-import { spawn } from 'node:child_process';
 import { promises as fsp } from 'node:fs';
+import path from 'node:path';
 import { z } from 'zod';
+import { sandboxExec } from '../sandbox/client';
+import { runShell, type ShellResult } from '../sandbox/shell';
 import { scrubbedEnv } from '../safety/env';
 import { ToolError } from '../util/errors';
 import { defineTool, requirePermission, type ToolContext, type ToolDefinition } from './types';
 
-const OUTPUT_CAP = 512 * 1024;
-
-export interface ShellResult {
-  exitCode: number | null;
-  stdout: string;
-  stderr: string;
-  timedOut: boolean;
-}
-
-export function runShell(
-  command: string,
-  cwd: string,
-  env: Record<string, string>,
-  timeoutMs: number,
-  signal?: AbortSignal,
-): Promise<ShellResult> {
-  return new Promise((resolve) => {
-    const child = spawn('/bin/sh', ['-c', command], {
-      cwd,
-      env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      detached: true,
-    });
-    let stdout = '';
-    let stderr = '';
-    let timedOut = false;
-    const killTree = () => {
-      try {
-        if (child.pid) process.kill(-child.pid, 'SIGKILL');
-      } catch {
-        child.kill('SIGKILL');
-      }
-    };
-    const timer = setTimeout(() => {
-      timedOut = true;
-      killTree();
-    }, timeoutMs);
-    const onAbort = () => killTree();
-    signal?.addEventListener('abort', onAbort, { once: true });
-    child.stdout.on('data', (d: Buffer) => {
-      if (stdout.length < OUTPUT_CAP) stdout += d.toString();
-    });
-    child.stderr.on('data', (d: Buffer) => {
-      if (stderr.length < OUTPUT_CAP) stderr += d.toString();
-    });
-    const done = (exitCode: number | null) => {
-      clearTimeout(timer);
-      signal?.removeEventListener('abort', onAbort);
-      resolve({ exitCode, stdout, stderr, timedOut });
-    };
-    child.on('error', (err) => {
-      stderr += err.message;
-      done(null);
-    });
-    child.on('close', (code) => done(code));
-  });
-}
+export { runShell, type ShellResult };
 
 const TOOLS_DESCRIPTION = `Execute a shell command in the workspace and return its exit code, stdout and stderr. Useful for running analysis scripts (python3, node), DuckDB or sqlite3 CLIs, tests, linters and read-only git queries.
 When: use this when you need to invoke external programs. For file reading prefer read_file (it records read state for read-before-write); for file search prefer grep_text; for SQL over CSV/JSON/Parquet prefer sql_query.
@@ -88,8 +34,33 @@ async function execute(
     summary: `run \`${command.length > 200 ? command.slice(0, 200) + '...' : command}\``,
     command,
   });
-  const env = scrubbedEnv(ctx.env, ctx.config.bashPassEnv);
-  const res = await runShell(command, dir.abs, env, timeout * 1000, ctx.signal);
+  const socket = ctx.config.sandboxSocket;
+  let res: ShellResult;
+  if (socket) {
+    // The sandbox has its own clean environment; only variables passed on purpose go along.
+    const passed = Object.fromEntries(
+      ctx.config.bashPassEnv.filter((k) => ctx.env[k] !== undefined).map((k) => [k, ctx.env[k]!]),
+    );
+    res = await sandboxExec(
+      socket,
+      {
+        v: 1,
+        command,
+        mount: dir.mount.alias,
+        cwd: path.relative(dir.mount.dir, dir.abs) || '.',
+        timeoutMs: timeout * 1000,
+        env: passed,
+      },
+      ctx.signal,
+    );
+  } else
+    res = await runShell(
+      command,
+      dir.abs,
+      scrubbedEnv(ctx.env, ctx.config.bashPassEnv),
+      timeout * 1000,
+      ctx.signal,
+    );
   const parts = [
     `exit_code: ${res.exitCode ?? 'none'}${res.timedOut ? ` (timed_out=true after ${timeout}s)` : ''}`,
   ];
