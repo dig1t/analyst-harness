@@ -134,6 +134,11 @@ export class HeatmapChart extends ChartComponent<ComponentOf<'heatmap'>> {
     svg.appendChild(marks);
     const xName = def.x.label ?? columnLabel(app, def.data, def.x.field);
     const yName = def.y.label ?? columnLabel(app, def.data, def.y.field);
+    // Label every cell or none: a mix reads as if the unlabeled cells meant something else.
+    const cellW = Math.max(1, xb.bandwidth - GAP);
+    const cellH = Math.max(1, yb.bandwidth - GAP);
+    const showLabels =
+      cellH >= 16 && this.cells.every((c) => c.v === null || textWidth(fmt(c.v), 10.5) + 8 < cellW);
     for (const c of this.cells) {
       const cx = xb(c.x)!;
       const cy = yb(c.y)!;
@@ -169,7 +174,7 @@ export class HeatmapChart extends ChartComponent<ComponentOf<'heatmap'>> {
       marks.appendChild(rect);
       if (c.v !== null) {
         const text = fmt(c.v);
-        if (textWidth(text, 10.5) + 8 < w && hgt >= 16)
+        if (showLabels)
           marks.appendChild(
             s(
               'text',
