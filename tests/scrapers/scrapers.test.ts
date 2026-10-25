@@ -1,7 +1,16 @@
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import { gzipSync } from 'node:zlib';
-import { extract, getPath, mapFields, parseFeed, parseSitemap } from '../../src/scrapers/extract';
+import {
+  extract,
+  getPath,
+  mapFields,
+  parseDataXml,
+  parseFeed,
+  parseSitemap,
+  readItemPath,
+  selectItems,
+} from '../../src/scrapers/extract';
 import {
   decodeBody,
   HttpError,
@@ -11,7 +20,8 @@ import {
 import { HostRateLimiter } from '../../src/scrapers/rate-limiter';
 import { ScraperRegistry } from '../../src/scrapers/registry';
 import { RobotsCache } from '../../src/scrapers/robots';
-import { formatScrapeReport, ScraperRunner } from '../../src/scrapers/runner';
+import { formatScrapeReport, recordKey, ScraperRunner } from '../../src/scrapers/runner';
+import YAML from 'yaml';
 import { loadScraperSpecs, parseScraperSpec, type ScraperSpecInput } from '../../src/scrapers/spec';
 import { coerce, validateRecords } from '../../src/scrapers/validate';
 import { fakeFetch, tmpDir, writeFiles, type FakeRoute } from '../helpers';
@@ -209,6 +219,178 @@ describe('extractors', () => {
     expect(bare.records).toEqual([{ text: 'B2', href: 'https://books.test/cat/b2.html' }]);
   });
 
+  test("selectItems flattens arrays along the path and keeps each item's parent", () => {
+    const doc = {
+      days: [
+        {
+          date: '2026-10-22',
+          prices: [
+            { sku: 'a', p: 1 },
+            { sku: 'b', p: 2 },
+          ],
+        },
+        { date: '2026-10-23', prices: { sku: 'a', p: 3 } },
+      ],
+      meta: { source: 'test' },
+    };
+    const { items, crossedArray } = selectItems(doc, 'days.prices');
+    expect(crossedArray).toBe(true);
+    expect(items.map((i) => [readItemPath(i, '$parent.date'), readItemPath(i, 'sku')])).toEqual([
+      ['2026-10-22', 'a'],
+      ['2026-10-22', 'b'],
+      ['2026-10-23', 'a'],
+    ]);
+    expect(readItemPath(items[0]!, '$root.meta.source')).toBe('test');
+    expect(readItemPath(items[0]!, '$parent')).toBe(doc.days[0]);
+    expect(readItemPath(items[0]!, '$root')).toBe(doc);
+    expect(selectItems(doc, 'days.0.prices').items).toHaveLength(2);
+    expect(selectItems(doc, 'missing.path').items).toEqual([]);
+    expect(selectItems(doc, 'meta')).toMatchObject({ crossedArray: false, items: [{ item: doc.meta }] });
+  });
+
+  test('json: items paths may cross arrays and fields may read the parent', async () => {
+    const { http } = client({
+      'https://api.test/days': {
+        body: {
+          days: [
+            { date: '2026-10-22', prices: [{ sku: 'a', p: 1 }] },
+            { date: '2026-10-23', prices: [{ sku: 'b', p: 2 }] },
+          ],
+        },
+      },
+      'https://api.test/rows': { body: { data: { label: 'x', rows: [{ v: 1 }] } } },
+    });
+    const crossing = spec({
+      source: { type: 'json', url: 'https://api.test/days', items: 'days.prices' },
+      fields: {
+        day: { path: '$parent.date', type: 'day' },
+        sku: { path: 'sku' },
+        p: { path: 'p', type: 'number' },
+      },
+      fetch: { respectRobots: false },
+    });
+    expect((await extract(crossing, { http })).records).toEqual([
+      { day: '2026-10-22', sku: 'a', p: 1 },
+      { day: '2026-10-23', sku: 'b', p: 2 },
+    ]);
+    const direct = spec({
+      source: { type: 'json', url: 'https://api.test/rows', items: 'data.rows' },
+      fields: { label: { path: '$parent.label' }, v: { path: 'v' } },
+      fetch: { respectRobots: false },
+    });
+    expect((await extract(direct, { http })).records).toEqual([{ label: 'x', v: 1 }]);
+  });
+
+  test('xml: namespaced documents, attributes, element text and parent paths', async () => {
+    const body = `<?xml version="1.0"?>
+<ns:catalog xmlns:ns="urn:test"><ns:shelf room="A"><ns:book id="1" lang="en"><ns:title> One </ns:title><ns:price cur="EUR">9.5</ns:price></ns:book><ns:book id="2"><ns:title>Two</ns:title></ns:book></ns:shelf></ns:catalog>`;
+    const { http } = client({
+      'https://xml.test/books': { body, headers: { 'content-type': 'application/xml' } },
+    });
+    const s = spec({
+      source: { type: 'xml', url: 'https://xml.test/books', items: 'catalog.shelf.book' },
+      fields: {
+        id: { path: '@id', type: 'integer', required: true },
+        title: { path: 'title', transform: ['trim'] },
+        price: { path: 'price.#text', type: 'number' },
+        currency: { path: 'price.@cur' },
+        room: { path: '$parent.@room' },
+      },
+      fetch: { respectRobots: false },
+    });
+    const res = await extract(s, { http });
+    expect(res.records).toEqual([
+      { id: '1', title: 'One', price: '9.5', currency: 'EUR', room: 'A' },
+      { id: '2', title: 'Two', price: undefined, currency: undefined, room: 'A' },
+    ]);
+    const keepNs = spec({
+      source: {
+        type: 'xml',
+        url: 'https://xml.test/books',
+        items: 'ns:catalog.ns:shelf.ns:book',
+        stripNamespaces: false,
+      },
+      fetch: { respectRobots: false },
+    });
+    expect((await extract(keepNs, { http })).records[0]).toMatchObject({ '@id': '1' });
+    const wrong = spec({
+      source: { type: 'xml', url: 'https://xml.test/books', items: 'catalog.nothing' },
+      fetch: { respectRobots: false },
+    });
+    await expect(extract(wrong, { http })).rejects.toThrow(
+      /no elements at "catalog.nothing".*top-level elements: catalog/,
+    );
+    expect(() => parseDataXml('<a><b></a>')).toThrow(/not valid XML/);
+  });
+
+  test('the shipped ECB spec reads the official 90-day reference rates format', async () => {
+    const ecb = parseScraperSpec(
+      YAML.parse(
+        await fsp.readFile(path.resolve(__dirname, '../../config/scrapers/ecb-exchange-rates.yaml'), 'utf8'),
+      ),
+    );
+    // Same structure as https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist-90d.xml
+    // (rates here are made-up test values).
+    const body = `<?xml version="1.0" encoding="UTF-8"?>
+<gesmes:Envelope xmlns:gesmes="http://www.gesmes.org/xml/2002-08-01" xmlns="http://www.ecb.int/vocabulary/2002-08-01/eurofxref">
+\t<gesmes:subject>Reference rates</gesmes:subject>
+\t<gesmes:Sender>
+\t\t<gesmes:name>European Central Bank</gesmes:name>
+\t</gesmes:Sender>
+\t<Cube>
+\t\t<Cube time='2026-10-23'>
+\t\t\t<Cube currency='USD' rate='1.0812'/>
+\t\t\t<Cube currency='JPY' rate='161.42'/>
+\t\t</Cube>
+\t\t<Cube time='2026-10-22'>
+\t\t\t<Cube currency='USD' rate='1.079'/>
+\t\t\t<Cube currency='JPY' rate='160.95'/>
+\t\t</Cube>
+\t</Cube>
+</gesmes:Envelope>`;
+    const { http } = client({ [ecb.source.url]: { body, headers: { 'content-type': 'text/xml' } } });
+    const test = { ...ecb, fetch: { ...ecb.fetch, respectRobots: false } };
+    const res = await extract(test, { http });
+    const { valid, invalid } = validateRecords(test, res.records);
+    expect(invalid).toEqual([]);
+    expect(valid).toEqual([
+      { date: '2026-10-23', currency: 'USD', rate: 1.0812 },
+      { date: '2026-10-23', currency: 'JPY', rate: 161.42 },
+      { date: '2026-10-22', currency: 'USD', rate: 1.079 },
+      { date: '2026-10-22', currency: 'JPY', rate: 160.95 },
+    ]);
+    expect(recordKey(ecb, valid[0]!)).toBe('2026-10-23|USD');
+    expect(ecb).toMatchObject({ enabled: true, timezone: 'Europe/Berlin', output: { mode: 'new' } });
+  });
+
+  test('csv: header rows, delimiters, skipped preamble and column fields', async () => {
+    const { http } = client({
+      'https://csv.test/data.csv': {
+        body: 'Report generated today\nKEY;TIME_PERIOD;OBS_VALUE\nUSD;2026-10-23;"1,0812"\nGBP;2026-10-23;0.8301\n',
+      },
+    });
+    const s = spec({
+      source: { type: 'csv', url: 'https://csv.test/data.csv', delimiter: ';', skipRows: 1 },
+      fields: {
+        currency: { path: 'KEY', required: true },
+        day: { path: 'TIME_PERIOD', type: 'day' },
+        value: { path: 'OBS_VALUE' },
+      },
+      fetch: { respectRobots: false },
+    });
+    expect((await extract(s, { http })).records).toEqual([
+      { currency: 'USD', day: '2026-10-23', value: '1,0812' },
+      { currency: 'GBP', day: '2026-10-23', value: '0.8301' },
+    ]);
+    const raw = spec({
+      source: { type: 'csv', url: 'https://csv.test/data.csv', delimiter: ';', skipRows: 1, limit: 1 },
+      fetch: { respectRobots: false },
+    });
+    expect((await extract(raw, { http })).records).toEqual([
+      { KEY: 'USD', TIME_PERIOD: '2026-10-23', OBS_VALUE: '1,0812' },
+    ]);
+  });
+
   test('rss and atom feeds normalize to common fields', async () => {
     const rss = `<?xml version="1.0"?><rss version="2.0"><channel><title>t</title>
       <item><title>One</title><link>https://n.test/1</link><guid>g1</guid><pubDate>Fri, 23 Oct 2026 10:00:00 GMT</pubDate><description>Hello &amp; welcome</description><category>ai</category></item>
@@ -328,6 +510,32 @@ describe('validation', () => {
     [{ type: 'date' }, 'not a date'],
   ])('coerce %j rejects %j', (rule, input) => {
     expect(coerce(input, { required: false, transform: [], ...rule } as never).ok).toBe(false);
+  });
+
+  test('day keeps calendar days and rejects impossible ones', () => {
+    const rule = { type: 'day' as const, required: false, transform: [] };
+    expect(coerce('2026-10-23', rule)).toEqual({ ok: true, value: '2026-10-23' });
+    expect(coerce('2026-10-23T22:15:00Z', rule)).toEqual({ ok: true, value: '2026-10-23' });
+    expect(coerce(1761177600, rule)).toEqual({ ok: true, value: '2025-10-23' });
+    expect(coerce('2026-02-30', rule)).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/calendar day/),
+    });
+    expect(coerce('soon', rule)).toMatchObject({ ok: false });
+  });
+
+  test('keys may be several fields and must name existing fields', () => {
+    expect(recordKey({ key: ['a', 'b'] }, { a: 1, b: 'x' })).toBe('1|x');
+    expect(recordKey({ key: 'a' }, { a: 2 })).toBe('2');
+    expect(recordKey({ key: ['a', 'b'] }, { a: 1 })).toMatch(/^[0-9a-f]{16,}$/);
+    expect(recordKey({}, { a: 1 })).toBe(recordKey({}, { a: 1 }));
+    expect(() =>
+      spec({
+        source: { type: 'rss', url: 'https://x.test/f' },
+        fields: { a: { path: 'a' } },
+        key: ['a', 'b'],
+      }),
+    ).toThrow(/key "b" is not one of the fields/);
   });
 
   test('required, default and optional fields', () => {

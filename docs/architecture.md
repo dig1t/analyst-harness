@@ -56,7 +56,7 @@ skills, delegation, scrapers, SQL and fetch. Services are injected, so tests swa
 
 ## Scrapers
 
-A spec (`src/scrapers/spec.ts`) describes the source (JSON, HTML, RSS/Atom or sitemap), field
+A spec (`src/scrapers/spec.ts`) describes the source (JSON, XML, CSV, HTML, RSS/Atom or sitemap), field
 rules, a record key, validation thresholds, output mode and alert rules. The runner fetches
 politely (robots.txt, per-host intervals, retries with `Retry-After`, conditional requests),
 extracts and validates records, compares them with the last run and appends new or changed

@@ -16,7 +16,11 @@ export const TRANSFORMS = [
 
 export const FieldRuleSchema = z
   .object({
-    /** JSON: dot path inside the item (`a.b.0.c`). RSS: item key. */
+    /**
+     * JSON and XML: dot path inside the item (`a.b.0.c`, XML attributes as `@name`); `$parent.`
+     * and `$root.` read from the enclosing element or the whole document. RSS: item key. CSV:
+     * the column name.
+     */
     path: z.string().optional(),
     /** HTML: CSS selector relative to the item element (empty string = the item itself). */
     selector: z.string().optional(),
@@ -24,7 +28,8 @@ export const FieldRuleSchema = z
     attr: z.string().optional(),
     /** HTML: collect every match as an array. */
     all: z.boolean().optional(),
-    type: z.enum(['string', 'number', 'integer', 'boolean', 'url', 'date', 'json']).default('string'),
+    /** `date` keeps date and time (ISO 8601 UTC); `day` keeps the calendar day (YYYY-MM-DD). */
+    type: z.enum(['string', 'number', 'integer', 'boolean', 'url', 'date', 'day', 'json']).default('string'),
     required: z.boolean().default(false),
     transform: z.array(z.enum(TRANSFORMS)).default([]),
     /** Keep the first capture group of this regex. */
@@ -88,6 +93,28 @@ const SourceSchema = z.discriminatedUnion('type', [
     .strict(),
   z
     .object({
+      type: z.literal('xml'),
+      url: z.string().url(),
+      /** Dot path to the repeated element; arrays along the way are flattened. */
+      items: z.string().min(1),
+      /** Drop namespace prefixes (`gesmes:Envelope` becomes `Envelope`). */
+      stripNamespaces: z.boolean().default(true),
+      limit: z.number().int().min(1).max(1_000_000).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('csv'),
+      url: z.string().url(),
+      delimiter: z.string().length(1).default(','),
+      /** The first row names the columns (otherwise column_1, column_2, ...). */
+      header: z.boolean().default(true),
+      skipRows: z.number().int().min(0).max(1000).default(0),
+      limit: z.number().int().min(1).max(1_000_000).optional(),
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal('sitemap'),
       url: z.string().url(),
       include: z.string().optional(),
@@ -106,8 +133,8 @@ export const ScraperSpecSchema = z
     timezone: z.string().default('UTC'),
     source: SourceSchema,
     fields: z.record(z.string(), FieldRuleSchema).default({}),
-    /** Field used to recognize the same record across runs (default: content hash). */
-    key: z.string().optional(),
+    /** Field, or fields, that identify the same record across runs (default: content hash). */
+    key: z.union([z.string(), z.array(z.string()).min(1).max(8)]).optional(),
     validation: z
       .object({
         minItems: z.number().int().min(0).default(1),
@@ -142,7 +169,15 @@ export const ScraperSpecSchema = z
       conditional: true,
     }),
   })
-  .strict();
+  .strict()
+  .superRefine((spec, ctx) => {
+    const fields = Object.keys(spec.fields);
+    const keys = spec.key === undefined ? [] : Array.isArray(spec.key) ? spec.key : [spec.key];
+    if (fields.length === 0) return;
+    for (const k of keys)
+      if (!fields.includes(k))
+        ctx.addIssue({ code: 'custom', path: ['key'], message: `key "${k}" is not one of the fields` });
+  });
 
 export type ScraperSpec = z.infer<typeof ScraperSpecSchema>;
 export type ScraperSpecInput = z.input<typeof ScraperSpecSchema>;

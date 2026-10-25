@@ -24,7 +24,7 @@ fields:
   url: { path: url, type: url }
   comments: { path: descendants, type: integer, default: 0 }
   time: { path: time, type: date }
-key: id # identifies a record across runs (default: content hash)
+key: id # field(s) that identify a record across runs, e.g. [date, currency]
 output: { dataset: hn-top-stories, mode: changed }
 validation: { minItems: 10, maxInvalidRatio: 0.2 }
 fetch: { minIntervalMs: 250, retries: 3, respectRobots: true }
@@ -38,21 +38,26 @@ notify: { onNew: false, onFailure: true, alertAfterFailures: 2 }
 | `json`    | `url`, `items`, `entries`, `expand { url, limit }`, `limit`         | `entries: true` turns an object map into `{key, value}` records; `{item}` or `{item.field}` in `expand.url` |
 | `html`    | `url`, `itemSelector`, `next { selector, attr, maxPages }`, `limit` | CSS selectors via cheerio; `next` follows pagination links                                                  |
 | `rss`     | `url`, `limit`                                                      | RSS 2.0 and Atom                                                                                            |
+| `xml`     | `url`, `items`, `stripNamespaces`, `limit`                          | Any XML document; attributes read as `@name`, element text as `#text`                                       |
+| `csv`     | `url`, `delimiter`, `header`, `skipRows`, `limit`                   | Fields name columns; quoted fields and embedded line breaks handled                                         |
 | `sitemap` | `url`, `include` (regex), `followIndex`, `limit`                    | Follows sitemap indexes                                                                                     |
 
 ## Fields
 
-Each field rule takes `path` (JSON dot path such as `a.b.0.c`, or the feed item key) or
-`selector` (HTML, relative to the item; an empty string is the item itself) with `attr` and
-`all`, plus:
+Each field rule takes `path` (a dot path such as `a.b.0.c` for JSON and XML, the feed item key
+for RSS, the column name for CSV) or `selector` (HTML, relative to the item; an empty string is
+the item itself) with `attr` and `all`, plus the keys below. In JSON and XML, `items` paths
+flatten arrays they pass through (`days.prices` yields every price of every day), and a field
+path starting with `$parent.` or `$root.` reads from the enclosing element or the whole
+document, as the ECB spec does for the date on each day's element.
 
-| Key         | Values                                                                                       |
-| ----------- | -------------------------------------------------------------------------------------------- |
-| `type`      | `string`, `number`, `integer`, `boolean`, `url`, `date`, `json`                              |
-| `required`  | Records missing a required field are invalid                                                 |
-| `transform` | `trim`, `collapseWhitespace`, `lowercase`, `uppercase`, `number`, `absoluteUrl`, `stripTags` |
-| `regex`     | Keeps the first capture group                                                                |
-| `default`   | Used when the value is missing                                                               |
+| Key         | Values                                                                                                  |
+| ----------- | ------------------------------------------------------------------------------------------------------- |
+| `type`      | `string`, `number`, `integer`, `boolean`, `url`, `date` (ISO date and time), `day` (YYYY-MM-DD), `json` |
+| `required`  | Records missing a required field are invalid                                                            |
+| `transform` | `trim`, `collapseWhitespace`, `lowercase`, `uppercase`, `number`, `absoluteUrl`, `stripTags`            |
+| `regex`     | Keeps the first capture group                                                                           |
+| `default`   | Used when the value is missing                                                                          |
 
 ## Output and change detection
 

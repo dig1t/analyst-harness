@@ -9,7 +9,8 @@ description: Build a new scheduled scraper for this harness as a declarative YAM
 
 1. **Choose the route.** Run `search_knowledge("acquisition strategy decision")` and read the
    decision framework. Prefer, in order: an official API, a bulk download or open-data portal, an
-   RSS/Atom feed, a sitemap, server-rendered HTML. A headless browser is out of scope for specs.
+   RSS/Atom feed, a sitemap, server-rendered HTML. Spec source types: `json`, `xml`, `csv`,
+   `rss`, `sitemap`, `html`. A headless browser is out of scope for specs.
 2. **Check permission.** Fetch `<origin>/robots.txt` with `web_fetch` and read the terms of use.
    Stop and report if automated access is forbidden, the data sits behind a login, or it is
    personal data you do not need (see `knowledge/wiki/legal-ethics/ethical-scraping-checklist.md`).

@@ -57,6 +57,14 @@ export interface ScrapeReport {
 
 const MAX_SEEN = 20_000;
 
+/** The record's identity across runs: its key field(s) joined with `|`, else a content hash. */
+export function recordKey(spec: Pick<ScraperSpec, 'key'>, rec: RawRecord): string {
+  const fields = spec.key === undefined ? [] : Array.isArray(spec.key) ? spec.key : [spec.key];
+  const parts = fields.map((f) => rec[f]);
+  if (fields.length === 0 || parts.some((p) => p === undefined || p === null)) return hashRecord(rec);
+  return parts.map(String).join('|');
+}
+
 /** Custom scrapers written in TypeScript plug into the same runner as YAML specs. */
 export interface CustomScraper {
   spec: ScraperSpec;
@@ -140,10 +148,7 @@ export class ScraperRunner {
       const toWrite: RawRecord[] = [];
       const seen = { ...state.seen };
       for (const rec of valid) {
-        const key =
-          spec.key && rec[spec.key] !== undefined && rec[spec.key] !== null
-            ? String(rec[spec.key])
-            : hashRecord(rec);
+        const key = recordKey(spec, rec);
         const hash = hashRecord(rec);
         const previous = seen[key];
         const isNew = previous === undefined;

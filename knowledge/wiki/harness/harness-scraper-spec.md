@@ -11,7 +11,7 @@ aliases: [scraper spec, harness spec, declarative scraper, scraper YAML]
 
 ## Overview
 
-The harness runs scrapers from YAML specs instead of code. A spec names a source (a JSON API, an HTML page with pagination, an RSS or Atom feed, or a sitemap), maps fields out of each item, says which field identifies a record, and sets validation thresholds, output mode, politeness and alert rules. The scheduler runs every enabled spec on its cron schedule; the runner fetches politely, extracts, validates, detects new and changed records and appends them to a JSONL dataset. Specs are validated strictly, so a typo is an error at load time rather than a silent no-op. Code is only needed when a site cannot be described this way (see the section "When a spec is not enough" below).
+The harness runs scrapers from YAML specs instead of code. A spec names a source (a JSON API, an XML or CSV file, an HTML page with pagination, an RSS or Atom feed, or a sitemap), maps fields out of each item, says which field identifies a record, and sets validation thresholds, output mode, politeness and alert rules. The scheduler runs every enabled spec on its cron schedule; the runner fetches politely, extracts, validates, detects new and changed records and appends them to a JSONL dataset. Specs are validated strictly, so a typo is an error at load time rather than a silent no-op. Code is only needed when a site cannot be described this way (see the section "When a spec is not enough" below).
 
 ## Anatomy of a spec
 
@@ -48,15 +48,17 @@ The spec reads top to bottom like the pipeline in [Anatomy of a Scraper](../fund
 | `json` | Official and hidden JSON APIs | `items` (dot path), `entries` (object map to records), `expand` (per-item URL template with `{item}` or `{item.field}`), `limit` |
 | `html` | Server-rendered pages | `itemSelector` (one element per record), `next` (selector, attribute and `maxPages` for pagination), `limit` |
 | `rss` | RSS 2.0 and Atom feeds | `limit` |
+| `xml` | XML data files (central banks, statistics offices, SDMX-style exports) | `items` (dot path to the repeated element), `stripNamespaces`, `limit` |
+| `csv` | CSV exports from open-data portals | `delimiter`, `header`, `skipRows`, `limit` |
 | `sitemap` | Discovering URLs from XML sitemaps | `include` (regex filter), `followIndex`, `limit` |
 
 Pick the highest option on the ladder in [Choosing an Acquisition Strategy](../fundamentals/scraping-decision-framework.md): an official API or feed beats HTML, which beats a browser.
 
 ## Field rules
 
-Each field reads either a `path` (JSON dot path such as `data.items.0.price`, or the feed item key) or a `selector` (CSS, relative to the item element; an empty string is the item itself) with an optional `attr` and `all: true` for lists. Then:
+Each field reads either a `path` (a dot path such as `data.items.0.price` for JSON and XML, with XML attributes written `@name`; the feed item key for RSS; the column name for CSV) or a `selector` (CSS, relative to the item element; an empty string is the item itself) with an optional `attr` and `all: true` for lists. Paths that start with `$parent.` or `$root.` read from the enclosing element or the whole document: the ECB spec reads each rate's date from its day element with `$parent.@time`. Then:
 
-- `type`: `string`, `number`, `integer`, `boolean`, `url`, `date` or `json`. Values are coerced; a value that cannot be coerced makes the record invalid when the field is `required`.
+- `type`: `string`, `number`, `integer`, `boolean`, `url`, `date` (date and time), `day` (calendar day) or `json`. Values are coerced; a value that cannot be coerced makes the record invalid when the field is `required`.
 - `transform`: `trim`, `collapseWhitespace`, `lowercase`, `uppercase`, `number`, `absoluteUrl`, `stripTags`, applied in order.
 - `regex`: keeps the first capture group, for example `"star-rating (\\w+)"`.
 - `default`: used when the value is missing.
@@ -69,7 +71,7 @@ Selector advice from [Writing Robust Selectors](../parsing/robust-selectors.md) 
 2. **Polite fetch.** Requests to one host are spaced by `minIntervalMs`. Network errors, 429 and 5xx are retried `retries` times with exponential backoff that honors `Retry-After`. Every request and redirect hop passes the harness SSRF guard. The User-Agent comes from the harness config and should name the project and a contact URL.
 3. **Conditional request.** With `conditional: true`, the runner sends `If-None-Match` and `If-Modified-Since` from the last response. A 304 ends the run early as "not modified", which costs the site almost nothing ([HTTP Caching and Conditional Requests](../http/caching-and-conditional-requests.md)).
 4. **Extract and validate.** Fields are extracted and coerced; invalid records are counted and sampled for the report.
-5. **Change detection.** Each valid record gets a key (the `key` field, or a content hash) and a content hash. Compared with the stored state, it is `new`, `changed` or `same`.
+5. **Change detection.** Each valid record gets a key (the `key` field or fields joined with `|`, or a content hash) and a content hash. Compared with the stored state, it is `new`, `changed` or `same`.
 6. **Write.** `output.mode` decides what is appended to `data/datasets/<dataset>/<YYYY-MM-DD>.jsonl`: `new`, `changed` (new and changed, the default) or `all`. Each line carries `_key`, `_hash`, `_change`, `_scraper` and `_scraped_at`.
 7. **Judge the run.** Fewer than `validation.minItems` valid records, or more than `maxInvalidRatio` invalid ones, marks the run failed (valid records are still written). A drop to zero after a healthy run is reported as a likely layout change.
 8. **Report.** The failure streak and history are saved in `data/state/scrapers/<name>.json`. Alerts follow `notify`: the first alert at `alertAfterFailures`, then every 10 failures; `onNew` posts a summary of new records.

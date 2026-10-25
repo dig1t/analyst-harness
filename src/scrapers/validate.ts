@@ -61,6 +61,18 @@ export function coerce(
       if (!Number.isFinite(raw)) return { ok: false, error: `not a date: ${JSON.stringify(value)}` };
       return { ok: true, value: new Date(raw).toISOString() };
     }
+    case 'day': {
+      const s = String(value).trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        const d = new Date(`${s}T00:00:00Z`);
+        if (!Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s) return { ok: true, value: s };
+        return { ok: false, error: `not a calendar day: ${JSON.stringify(value)}` };
+      }
+      const raw =
+        typeof value === 'number' ? (value < 1e11 ? value * 1000 : value) : Date.parse(String(value));
+      if (!Number.isFinite(raw)) return { ok: false, error: `not a date: ${JSON.stringify(value)}` };
+      return { ok: true, value: new Date(raw).toISOString().slice(0, 10) };
+    }
     case 'json':
       return { ok: true, value };
   }

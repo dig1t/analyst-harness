@@ -1,18 +1,23 @@
-# Daily euro reference rates (published by the ECB) through the free Frankfurter API.
-# Disabled by default: the endpoint could not be verified from the build sandbox. Run
-# `harness scrape ecb-exchange-rates --dry-run` and enable it once the dry run succeeds.
+# Euro foreign exchange reference rates, straight from the European Central Bank (the
+# primary source, no third-party wrapper). The ECB publishes them on TARGET working days at
+# around 16:00 CET. Reading the 90-day file instead of the daily one lets every run fill in
+# any day a previous run missed, and `mode: new` writes each (date, currency) pair once.
+# Rates are units of the currency per 1 EUR.
 name: ecb-exchange-rates
-description: ECB euro reference exchange rates via the Frankfurter API
-enabled: false
-schedule: '35 15 * * 1-5'
+description: ECB euro reference exchange rates (official XML, last 90 days)
+enabled: true
+schedule: '17 16 * * 1-5'
+timezone: Europe/Berlin
 source:
-  type: json
-  url: https://api.frankfurter.app/latest?from=EUR
-  items: rates
-  entries: true
+  type: xml
+  url: https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist-90d.xml
+  items: Envelope.Cube.Cube.Cube
 fields:
-  currency: { path: key, type: string, required: true }
-  rate: { path: value, type: number, required: true }
-output: { dataset: ecb-exchange-rates, mode: changed }
-validation: { minItems: 20, maxInvalidRatio: 0 }
+  date: { path: $parent.@time, type: day, required: true }
+  currency: { path: '@currency', type: string, required: true, transform: [trim, uppercase] }
+  rate: { path: '@rate', type: number, required: true }
+key: [date, currency]
+output: { dataset: ecb-exchange-rates, mode: new }
+validation: { minItems: 500, maxInvalidRatio: 0.01 }
+fetch: { minIntervalMs: 1000, retries: 3, respectRobots: true }
 notify: { onNew: false, onFailure: true, alertAfterFailures: 2 }

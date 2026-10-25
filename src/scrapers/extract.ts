@@ -1,5 +1,6 @@
 import * as cheerio from 'cheerio';
-import { XMLParser } from 'fast-xml-parser';
+import { XMLParser, XMLValidator } from 'fast-xml-parser';
+import { parseCsv } from '../util/csv';
 import type { HttpGetOptions, HttpResult, PoliteHttpClient } from './http-client';
 import type { FieldRule, ScraperSpec } from './spec';
 
@@ -27,6 +28,57 @@ export function getPath(obj: unknown, path: string | undefined): unknown {
     else return undefined;
   }
   return cur;
+}
+
+/** An item found by `selectItems`, with the element that contains it and the whole document. */
+export interface ItemContext {
+  item: unknown;
+  parent: unknown;
+  root: unknown;
+}
+
+/**
+ * Resolve a dot path to the items it names. Arrays met along the way are flattened, so in
+ * `days.prices` every price of every day is an item, and each item remembers its parent (the
+ * day). A path that ends on an array yields its elements; one that ends on a single value
+ * yields that value. `crossedArray` reports whether any array was flattened.
+ */
+export function selectItems(root: unknown, path: string): { items: ItemContext[]; crossedArray: boolean } {
+  let level: Array<{ value: unknown; parent: unknown }> = [{ value: root, parent: undefined }];
+  let crossedArray = false;
+  for (const part of path ? path.split('.') : []) {
+    const next: Array<{ value: unknown; parent: unknown }> = [];
+    const index = /^\d+$/.test(part);
+    for (const { value } of level) {
+      const flatten = Array.isArray(value) && !index;
+      if (flatten) crossedArray = true;
+      for (const holder of flatten ? value : [value]) {
+        if (holder === null || typeof holder !== 'object') continue;
+        const child = Array.isArray(holder)
+          ? index
+            ? holder[Number(part)]
+            : undefined
+          : (holder as Record<string, unknown>)[part];
+        if (child !== undefined) next.push({ value: child, parent: holder });
+      }
+    }
+    level = next;
+  }
+  const items: ItemContext[] = [];
+  for (const { value, parent } of level) {
+    if (Array.isArray(value)) for (const item of value) items.push({ item, parent, root });
+    else items.push({ item: value, parent, root });
+  }
+  return { items, crossedArray };
+}
+
+/** Read a field path relative to an item; `$parent.` and `$root.` reach outside the item. */
+export function readItemPath(ctx: ItemContext, path: string | undefined): unknown {
+  if (path === '$parent') return ctx.parent;
+  if (path === '$root') return ctx.root;
+  if (path?.startsWith('$parent.')) return getPath(ctx.parent, path.slice('$parent.'.length));
+  if (path?.startsWith('$root.')) return getPath(ctx.root, path.slice('$root.'.length));
+  return getPath(ctx.item, path);
 }
 
 function fetchOpts(spec: ScraperSpec, extra: Partial<HttpGetOptions> = {}): HttpGetOptions {
@@ -71,31 +123,42 @@ export async function extractJsonSource(
   const src = spec.source;
   const res = await ctx.http.get(src.url, fetchOpts(spec, conditional(spec, ctx)));
   if (res.notModified) return { records: [], pages: 1, notModified: true, validators: ctx.validators };
-  const root = getPath(parseJson(res), src.items);
-  let items: unknown[];
+  const doc = parseJson(res);
+  const root = getPath(doc, src.items);
+  const parentPath = src.items.includes('.') ? src.items.slice(0, src.items.lastIndexOf('.')) : '';
+  const parent = src.items ? getPath(doc, parentPath) : undefined;
+  let items: ItemContext[];
   if (src.entries) {
     if (!root || typeof root !== 'object' || Array.isArray(root))
       throw new Error(`"${src.items}" is not an object, cannot use entries`);
-    items = Object.entries(root as Record<string, unknown>).map(([key, value]) => ({ key, value }));
+    items = Object.entries(root as Record<string, unknown>).map(([key, value]) => ({
+      item: { key, value },
+      parent: root,
+      root: doc,
+    }));
+  } else if (Array.isArray(root)) {
+    items = root.map((item) => ({ item, parent, root: doc }));
   } else {
-    if (!Array.isArray(root))
+    const selected = selectItems(doc, src.items);
+    if (!selected.crossedArray || selected.items.length === 0)
       throw new Error(`"${src.items || '(root)'}" is not an array in the response from ${res.finalUrl}`);
-    items = root;
+    items = selected.items;
   }
   if (src.limit) items = items.slice(0, src.limit);
   let pages = 1;
   if (src.expand) {
-    const expanded: unknown[] = [];
-    for (const item of items.slice(0, src.expand.limit)) {
-      const r = await ctx.http.get(fillTemplate(src.expand.url, item), fetchOpts(spec));
+    const expanded: ItemContext[] = [];
+    for (const entry of items.slice(0, src.expand.limit)) {
+      const r = await ctx.http.get(fillTemplate(src.expand.url, entry.item), fetchOpts(spec));
       pages++;
       const value = parseJson(r);
-      if (value !== null && value !== undefined) expanded.push(value);
+      if (value !== null && value !== undefined)
+        expanded.push({ item: value, parent: entry.item, root: doc });
     }
     items = expanded;
   }
-  const records = items.map((item) =>
-    mapFields(item, spec.fields, (rule) => getPath(item, rule.path), src.url),
+  const records = items.map((entry) =>
+    mapFields(entry.item, spec.fields, (rule) => readItemPath(entry, rule.path), src.url),
   );
   return { records, pages, notModified: false, validators: validatorsOf(res) };
 }
@@ -243,6 +306,66 @@ export async function extractRssSource(
   return { records, pages: 1, notModified: false, validators: validatorsOf(res) };
 }
 
+function dataXmlParser(stripNamespaces: boolean): XMLParser {
+  return new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: '@',
+    textNodeName: '#text',
+    removeNSPrefix: stripNamespaces,
+    parseTagValue: false,
+    parseAttributeValue: false,
+    processEntities: true,
+  });
+}
+
+/** Parse a data XML document; attributes appear as `@name`, element text as `#text`. */
+export function parseDataXml(body: string, stripNamespaces = true): XmlNode {
+  const valid = XMLValidator.validate(body);
+  if (valid !== true) throw new Error(`not valid XML: ${valid.err.msg} (line ${valid.err.line})`);
+  return dataXmlParser(stripNamespaces).parse(body) as XmlNode;
+}
+
+export async function extractXmlSource(
+  spec: ScraperSpec & { source: { type: 'xml' } },
+  ctx: ExtractContext,
+): Promise<ExtractResult> {
+  const src = spec.source;
+  const res = await ctx.http.get(src.url, fetchOpts(spec, conditional(spec, ctx)));
+  if (res.notModified) return { records: [], pages: 1, notModified: true, validators: ctx.validators };
+  const doc = parseDataXml(res.body, src.stripNamespaces);
+  let { items } = selectItems(doc, src.items);
+  if (items.length === 0) {
+    const top = Object.keys(doc).filter((k) => !k.startsWith('?'));
+    throw new Error(
+      `no elements at "${src.items}" in ${res.finalUrl} (top-level elements: ${top.join(', ')})`,
+    );
+  }
+  if (src.limit) items = items.slice(0, src.limit);
+  const records = items.map((entry) =>
+    mapFields(entry.item, spec.fields, (rule) => readItemPath(entry, rule.path), src.url),
+  );
+  return { records, pages: 1, notModified: false, validators: validatorsOf(res) };
+}
+
+export async function extractCsvSource(
+  spec: ScraperSpec & { source: { type: 'csv' } },
+  ctx: ExtractContext,
+): Promise<ExtractResult> {
+  const src = spec.source;
+  const res = await ctx.http.get(src.url, fetchOpts(spec, conditional(spec, ctx)));
+  if (res.notModified) return { records: [], pages: 1, notModified: true, validators: ctx.validators };
+  const { rows } = parseCsv(res.body, {
+    delimiter: src.delimiter,
+    header: src.header,
+    skipRows: src.skipRows,
+  });
+  const limited = src.limit ? rows.slice(0, src.limit) : rows;
+  const records = limited.map((row) =>
+    mapFields(row, spec.fields, (rule) => (rule.path === undefined ? undefined : row[rule.path]), src.url),
+  );
+  return { records, pages: 1, notModified: false, validators: validatorsOf(res) };
+}
+
 export function parseSitemap(body: string): {
   urls: Array<{ loc: string; lastmod?: string }>;
   sitemaps: string[];
@@ -351,6 +474,10 @@ export async function extract(spec: ScraperSpec, ctx: ExtractContext): Promise<E
       return extractHtmlSource(spec as ScraperSpec & { source: { type: 'html' } }, ctx);
     case 'rss':
       return extractRssSource(spec as ScraperSpec & { source: { type: 'rss' } }, ctx);
+    case 'xml':
+      return extractXmlSource(spec as ScraperSpec & { source: { type: 'xml' } }, ctx);
+    case 'csv':
+      return extractCsvSource(spec as ScraperSpec & { source: { type: 'csv' } }, ctx);
     case 'sitemap':
       return extractSitemapSource(spec as ScraperSpec & { source: { type: 'sitemap' } }, ctx);
   }
