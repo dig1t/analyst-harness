@@ -65,7 +65,7 @@ export class Reflector {
         effort: 'low',
         purpose: 'reflect',
       });
-      costUsd = this.priceBook?.cost(response.model, response.usage) ?? 0;
+      costUsd = this.priceBook?.costOf(response) ?? 0;
       parsed = extractJson(text);
     } catch {
       return { lessons: [], costUsd };

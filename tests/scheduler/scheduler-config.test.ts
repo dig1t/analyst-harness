@@ -71,6 +71,8 @@ describe('config', () => {
     const root = await tmpDir();
     const cfg = await loadConfig({ root, env: {} });
     expect(cfg.models).toMatchObject({ default: 'claude-opus-5-5', effort: 'medium' });
+    expect(cfg.provider).toBe('claude-code');
+    expect(cfg.claudeCode).toEqual({ command: 'claude' });
     expect(cfg.resolved.workspace).toBe(path.join(root, 'data', 'workspace'));
     expect(cfg.resolved.knowledge).toBe(path.join(root, 'knowledge'));
     expect(cfg.resolved.learnedSkills).toBe(cfg.resolved.skills);
@@ -128,7 +130,7 @@ describe('config', () => {
   test('the repository config/harness.yaml is valid', async () => {
     const root = path.resolve(__dirname, '../..');
     const cfg = await loadConfig({ root, env: {} });
-    expect(cfg.provider).toBe('anthropic');
+    expect(cfg.provider).toBe('claude-code');
     expect(cfg.permissions.bashAllowExtra).toEqual(['^(python3|duckdb|sqlite3)\\b']);
     expect(cfg.resolved.scrapers).toBe(path.join(root, 'config', 'scrapers'));
   });

@@ -206,7 +206,7 @@ export async function runAgent(cfg: AgentRunConfig): Promise<RunResult> {
   let costUsd = 0;
   const account = (res: CompletionResponse) => {
     usage = addUsage(usage, res.usage);
-    const c = cfg.priceBook.cost(res.model, res.usage);
+    const c = cfg.priceBook.costOf(res);
     costUsd += c;
     cfg.budget?.record(c);
     return c;

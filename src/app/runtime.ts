@@ -19,6 +19,7 @@ import type { DashboardInfo, HarnessOps } from '../discord/router';
 import { accuracyReport, formatAccuracy, verificationTask, type AccuracyReport } from '../knowledge/accuracy';
 import { KnowledgeVault } from '../knowledge/vault';
 import { AnthropicProvider } from '../llm/anthropic';
+import { ClaudeCodeProvider } from '../llm/claude-code';
 import { PriceBook } from '../llm/pricing';
 import type { LLMProvider } from '../llm/provider';
 import { ScriptedProvider } from '../llm/scripted';
@@ -168,15 +169,22 @@ export class HarnessRuntime {
       opts.provider ??
       (config.provider === 'scripted'
         ? new ScriptedProvider(() => ({
-            text: 'The scripted provider is active (HARNESS_PROVIDER=scripted). Configure ANTHROPIC_API_KEY to use Claude.',
+            text: 'The scripted provider is active (HARNESS_PROVIDER=scripted). Set the provider to claude-code (your Claude plan) or anthropic (an API key) to use Claude.',
           }))
-        : new AnthropicProvider({
-            apiKey: opts.env?.ANTHROPIC_API_KEY,
-            thinkingDisplay: config.anthropic.thinkingDisplay,
-            prefixMismatch: config.anthropic.prefixMismatch,
-            fallbacks: config.anthropic.fallbacks,
-            logger: logger.child({ component: 'anthropic' }),
-          }));
+        : config.provider === 'claude-code'
+          ? new ClaudeCodeProvider({
+              command: config.claudeCode.command,
+              cwd: path.join(config.resolved.state, 'claude-code'),
+              env: opts.env,
+              logger: logger.child({ component: 'claude-code' }),
+            })
+          : new AnthropicProvider({
+              apiKey: opts.env?.ANTHROPIC_API_KEY,
+              thinkingDisplay: config.anthropic.thinkingDisplay,
+              prefixMismatch: config.anthropic.prefixMismatch,
+              fallbacks: config.anthropic.fallbacks,
+              logger: logger.child({ component: 'anthropic' }),
+            }));
     const spend = await new SpendTracker(
       config.budgets.dailyUsd,
       path.join(config.resolved.state, 'spend.json'),

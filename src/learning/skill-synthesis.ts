@@ -63,7 +63,7 @@ export class SkillSynthesizer {
       effort: 'medium',
       purpose: 'synthesize',
     });
-    const costUsd = this.priceBook?.cost(response.model, response.usage) ?? 0;
+    const costUsd = this.priceBook?.costOf(response) ?? 0;
     const content = text
       .replace(/^```(?:markdown|md)?\s*\n/, '')
       .replace(/\n```\s*$/, '')

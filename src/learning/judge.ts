@@ -108,7 +108,7 @@ export class RunJudge {
         effort: 'low',
         purpose: 'judge',
       });
-      const costUsd = this.opts.priceBook?.cost(response.model, response.usage) ?? 0;
+      const costUsd = this.opts.priceBook?.costOf(response) ?? 0;
       const parsed = extractJson<{
         score?: unknown;
         verdict?: unknown;

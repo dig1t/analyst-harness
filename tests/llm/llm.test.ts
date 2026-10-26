@@ -376,6 +376,10 @@ describe('PriceBook and SpendTracker', () => {
       }),
     ).toBe(0);
     expect(book.get('custom')).toBeDefined();
+    // A cost the provider reports (a Claude plan bills nothing per token) wins over list price.
+    const usage = { inputTokens: 1_000_000, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
+    expect(book.costOf({ model: 'claude-opus-5-5', usage, costUsd: 0 })).toBe(0);
+    expect(book.costOf({ model: 'claude-opus-5-5', usage })).toBeCloseTo(4);
   });
 
   test('enforces the daily cap and persists history', async () => {

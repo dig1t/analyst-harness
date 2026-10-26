@@ -23,6 +23,11 @@ export interface CompletionResponse {
   refusal?: { category?: string | null; explanation?: string | null };
   /** Provider notes such as dropped thinking blocks, surfaced for logging. */
   notes?: string[];
+  /**
+   * What the call cost when the provider knows it (a Claude plan bills nothing per token).
+   * Unset means the PriceBook prices `usage` at list price.
+   */
+  costUsd?: number;
 }
 
 export interface ProviderCapabilities {

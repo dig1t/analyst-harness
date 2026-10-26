@@ -23,7 +23,9 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates python3 tini \
   && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
+# The image has no Claude Code CLI, so it calls the Claude API (ANTHROPIC_API_KEY in .env).
 ENV NODE_ENV=production \
+    HARNESS_PROVIDER=anthropic \
     HARNESS_ROOT=/app \
     HARNESS_DATA_DIR=/app/data \
     HARNESS_KNOWLEDGE_DIR=/app/data/knowledge \

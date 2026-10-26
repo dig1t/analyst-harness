@@ -12,6 +12,7 @@ import type { HarnessConfig } from './config/schema';
 import type { AgentEvent } from './core/agent-loop';
 import { loadUiAssets } from './dashboards/assets';
 import { checkVaultLinks, formatAccuracy } from './knowledge/accuracy';
+import { claudeCodeLogin } from './llm/claude-code';
 import { DashboardService } from './dashboards/service';
 import { formatDomainSeed, isTrackableHost } from './net/domains';
 import { probeUrl } from './net/probe';
@@ -119,7 +120,7 @@ async function daemonCommand(
     port: Number(process.env.PORT ?? 8080),
     host: process.env.HOST || '127.0.0.1',
   };
-  const where = { root: config.root, dataDir: config.resolved.data };
+  const where = { root: config.root, dataDir: config.resolved.data, provider: config.provider };
   switch (sub) {
     case 'ensure':
     case 'start':
@@ -446,12 +447,30 @@ export async function runCli(argv: string[], io: CliIO = defaultIO): Promise<num
         return 0;
       }
       case 'doctor': {
+        const d = config.discordEnv;
+        const login =
+          config.provider === 'claude-code'
+            ? await claudeCodeLogin({ command: config.claudeCode.command })
+            : undefined;
         const checks: Array<[string, boolean, string]> = [
-          [
-            'ANTHROPIC_API_KEY set',
-            !!process.env.ANTHROPIC_API_KEY || config.provider === 'scripted',
-            'needed for the anthropic provider (or run `ant auth login`)',
-          ],
+          login
+            ? ['Claude Code login', login.ok, login.note]
+            : [
+                'ANTHROPIC_API_KEY set',
+                !!process.env.ANTHROPIC_API_KEY || config.provider === 'scripted',
+                'needed for the anthropic provider (or run `ant auth login`)',
+              ],
+          ...(login && d.token
+            ? [
+                [
+                  'Discord limited to you',
+                  !d.allowEveryone &&
+                    d.allowedRoleIds.length === 0 &&
+                    new Set([...d.allowedUserIds, ...d.adminUserIds]).size <= 1,
+                  "other people's Discord tasks would run on your Claude plan, which is for your own use",
+                ] as [string, boolean, string],
+              ]
+            : []),
           ['DuckDB available', await DuckDbSqlService.isAvailable(), 'optional: enables sql_query'],
           [
             'Discord token set',
