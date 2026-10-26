@@ -80,8 +80,8 @@ Labels lower the odds; the sandbox and the permission layer limit the damage whe
 ## Further hardening
 
 - Remove the interpreters from `bashAllowExtra` so every script needs an approval.
-- Use an Anthropic API key with a spend limit, used only by this deployment, and a Discord bot
-  invited with the smallest set of permissions.
+- With the `anthropic` provider (the Docker image), use an Anthropic API key with a spend limit,
+  used only by this deployment. Invite the Discord bot with the smallest set of permissions.
 - Restrict the harness container's outbound traffic to the hosts it needs, with an egress
   proxy or host firewall rules (the domain registry, `config/domains.yaml`, lists them).
 - Run the sandbox under a stronger container runtime such as gVisor (`runtime: runsc`).

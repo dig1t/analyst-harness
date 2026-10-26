@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { closeSync, existsSync, openSync, promises as fsp, statSync } from 'node:fs';
 import path from 'node:path';
+import type { HarnessConfig } from '../config/schema';
 import { ensureDir, readJson, writeTextAtomic } from '../util/fs';
 
 export interface DaemonOptions {
@@ -245,10 +246,17 @@ export async function stopDaemon(opts: DaemonOptions, waitMs = 10_000): Promise<
   return true;
 }
 
+/** What `harness run` spends, by provider, for the session note. */
+const RUN_COST: Record<HarnessConfig['provider'], string> = {
+  'claude-code': 'runs on your Claude plan through Claude Code',
+  anthropic: 'uses the Anthropic API and the budgets',
+  scripted: 'answers with the offline scripted model',
+};
+
 /** The note a Claude Code session gets at start: what is running and how to use it. */
 export function sessionContext(
   status: DaemonStatus,
-  where: { root: string; dataDir: string },
+  where: { root: string; dataDir: string; provider?: HarnessConfig['provider'] },
   problem?: string,
 ): string {
   const { root, dataDir } = where;
@@ -262,7 +270,7 @@ export function sessionContext(
   return [
     `analyst-harness is running in the background (${status.pid ? `pid ${status.pid}` : 'started outside this manager'}${since}): scheduled scrapers, the learning loop, the Discord bot when configured, and dashboards at ${status.url}/dashboards/.`,
     `Use it from this session with the \`${cli}\` command (installed at ${root}):`,
-    `- ${cli} run "<task>": give the analyst agent a data task (uses the Anthropic API and the budgets)`,
+    `- ${cli} run "<task>": give the analyst agent a data task (${RUN_COST[where.provider ?? 'claude-code']})`,
     `- ${cli} scrapers, ${cli} scrape <name> [--dry-run]: list and run scrapers; datasets land in ${path.join(dataDir, 'datasets')}`,
     `- ${cli} explore <dataset>, ${cli} dashboard build <spec.yaml>, ${cli} dashboard list: dashboards`,
     `- ${cli} vault search "<query>", ${cli} vault status: the scraping knowledge vault`,

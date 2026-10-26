@@ -184,6 +184,12 @@ describe('harness daemon', () => {
     );
     expect(running).toContain('dashboards at http://127.0.0.1:8080/dashboards/');
     expect(running).toContain('datasets land in /opt/analyst-harness/data/datasets');
+    expect(running).toContain('a data task (runs on your Claude plan through Claude Code)');
+    const onApi = sessionContext(
+      { running: true, managed: true, pid: 42, port: 8080, url: 'http://127.0.0.1:8080', logFile: '/x.log' },
+      { ...where, provider: 'anthropic' },
+    );
+    expect(onApi).toContain('a data task (uses the Anthropic API and the budgets)');
     const down = sessionContext(
       { running: false, managed: false, port: 8080, url: 'http://127.0.0.1:8080', logFile: '/x.log' },
       where,

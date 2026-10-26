@@ -17,8 +17,8 @@ inside.
 - Node.js 22 or newer with npm (`node --version`). The installer from nodejs.org,
   [nvm](https://github.com/nvm-sh/nvm) and Homebrew all work.
 - git and [Claude Code](https://code.claude.com/docs).
-- An Anthropic API key for agent runs (`harness run`, `/ask` in Discord). Scrapers, dashboards
-  and the knowledge vault work without one.
+- A Claude Pro, Max, Team or Enterprise plan with Claude Code logged in, for agent runs
+  (`harness run`, `/ask` in Discord). Scrapers, dashboards and the knowledge vault work without it.
 - Optional: Python 3 for the analysis scripts agents write, and Docker for a 24/7 server or the
   command sandbox.
 

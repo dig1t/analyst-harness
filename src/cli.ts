@@ -120,7 +120,7 @@ async function daemonCommand(
     port: Number(process.env.PORT ?? 8080),
     host: process.env.HOST || '127.0.0.1',
   };
-  const where = { root: config.root, dataDir: config.resolved.data };
+  const where = { root: config.root, dataDir: config.resolved.data, provider: config.provider };
   switch (sub) {
     case 'ensure':
     case 'start':
